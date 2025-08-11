@@ -1,41 +1,37 @@
 name: Preprocess Server Machine Dataset
-description: Preprocesses the server machine dataset and generates training, test, and anomaly label files.
+description: Preprocesses dataset from load_dataset brick and prepares output paths for training, testing, and anomaly detection.
 
 inputs:
+  - name: raw_dataset_pth
+    type: String
+    description: Path to raw dataset output from load_dataset brick.
   - name: output_dir
     type: String
-    description: Directory to save processed dataset files
-    default: data/machine-1-1
-
-  - name: train_path
+    description: Directory to store processed datasets.
+    default: ./output/
+  - name: train_pth
     type: String
-    description: Path to save training data file (.pkl)
-    default: generate_data/machine-1-1_train.pkl
-
-  - name: test_path
+    description: Path to save processed training set.
+    default: ./output/train.csv
+  - name: test_pth
     type: String
-    description: Path to save test data file (.pkl)
-    default: generate_data/machine-1-1_test.pkl
-
-  - name: anomaly_path
+    description: Path to save processed testing set.
+    default: ./output/test.csv
+  - name: anomaly_pth
     type: String
-    description: Path to save anomaly label file (.pkl)
-    default: generate_data/machine-1-1_test_label.pkl
-
-  - name: window_size
-    type: Integer
-    description: Sliding window size for preprocessing
-    default: 100
-
-  - name: val_ratio
-    type: Float
-    description: Validation split ratio
-    default: 0.3
+    description: Path to save processed anomaly set.
+    default: ./output/anomaly.csv
 
 outputs:
-  - name: processed_out
+  - name: train_out
     type: String
-    description: Directory containing processed dataset files
+    description: Processed training dataset path.
+  - name: test_out
+    type: String
+    description: Processed testing dataset path.
+  - name: anomaly_out
+    type: String
+    description: Processed anomaly dataset path.
 
 implementation:
   container:
@@ -44,33 +40,42 @@ implementation:
       - sh
       - -c
       - |
-        # Install dependencies (if needed)
-        PIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet pandas numpy torch --user
+        set -e
+        echo "Installing dependencies..."
+        pip install --no-cache-dir pandas numpy
 
-        # Run preprocessing script
-        python3 generate_data/generate_training_data.py \
-          --output_dir "${{inputs.output_dir}}" \
-          --train_path "${{inputs.train_path}}" \
-          --test_path "${{inputs.test_path}}" \
-          --anomaly_path "${{inputs.anomaly_path}}" \
-          --window_size "${{inputs.window_size}}" \
-          --val_ratio "${{inputs.val_ratio}}"
+        echo "Running preprocessing..."
+        python3 - <<'EOF'
+        import pandas as pd
+        import sys
+        import os
 
-        # Copy output dir path for downstream bricks
-        echo "${{inputs.output_dir}}" > "${{outputs.processed_out}}"
+        raw_dataset_pth = sys.argv[1]
+        output_dir = sys.argv[2]
+        train_pth = sys.argv[3]
+        test_pth = sys.argv[4]
+        anomaly_pth = sys.argv[5]
 
+        os.makedirs(output_dir, exist_ok=True)
+
+        df = pd.read_csv(raw_dataset_pth)
+
+        # Example split (replace with actual logic)
+        train_df = df.sample(frac=0.7, random_state=42)
+        test_df = df.drop(train_df.index)
+        anomaly_df = df[df['label'] == 'anomaly'] if 'label' in df.columns else pd.DataFrame()
+
+        train_df.to_csv(train_pth, index=False)
+        test_df.to_csv(test_pth, index=False)
+        anomaly_df.to_csv(anomaly_pth, index=False)
+
+        print(f"train_out={train_pth}")
+        print(f"test_out={test_pth}")
+        print(f"anomaly_out={anomaly_pth}")
+        EOF
     args:
-      - --output_dir
+      - { inputValue: raw_dataset_pth }
       - { inputValue: output_dir }
-      - --train_path
-      - { inputValue: train_path }
-      - --test_path
-      - { inputValue: test_path }
-      - --anomaly_path
-      - { inputValue: anomaly_path }
-      - --window_size
-      - { inputValue: window_size }
-      - --val_ratio
-      - { inputValue: val_ratio }
-      - --processed_out
-      - { outputPath: processed_out }
+      - { inputValue: train_pth }
+      - { inputValue: test_pth }
+      - { inputValue: anomaly_pth }

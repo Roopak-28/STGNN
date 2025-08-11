@@ -1,30 +1,12 @@
 name: Load Server Dataset
-description: Loads dataset from the server machine and saves it as a PyTorch .pt file.
+description: Automatically loads the dataset from the server machine, processes it, and saves it as a PyTorch .pt file for downstream tasks.
 
-inputs:
-  - name: data
-    type: String
-    description: Path to dataset on the server machine (e.g., /mnt/data/train.csv)
-
-  - name: batch_size
-    type: Integer
-    description: Number of samples per batch
-    default: 32
-
-  - name: device
-    type: String
-    description: Device to use for training (cpu, cuda, cuda:0, etc.)
-    default: cuda:0
-
-  - name: scaling_required
-    type: Boolean
-    description: Whether to apply feature scaling to the dataset
-    default: true
+inputs: []
 
 outputs:
   - name: outputpath1
     type: String
-    description: Path to saved dataset file (.pt)
+    description: Path to the saved dataset file (.pt)
 
 implementation:
   container:
@@ -33,52 +15,30 @@ implementation:
       - sh
       - -c
       - |
+        set -e
         # Install dependencies
-        PIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet torch torchvision torchaudio --user
-        PIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet pandas --user
+        PIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet torch torchvision torchaudio pandas --user
 
         # Run Python script
         python3 -u - <<'PYCODE'
-        import argparse
         import os
         import torch
-        from my_dataset_module import load_dataset  # Replace with actual module
+        from my_dataset_module import load_dataset  # Replace with your actual dataset loader
 
-        parser = argparse.ArgumentParser()
-        parser.add_argument('--data', type=str, required=True)
-        parser.add_argument('--batch_size', type=int, required=True)
-        parser.add_argument('--device', type=str, required=True)
-        parser.add_argument('--scaling_required', type=bool, required=True)
-        parser.add_argument('--outputpath1', type=str, required=True)
-        args = parser.parse_args()
+        # Fixed settings for server dataset
+        DATA_PATH = "/mnt/data/server_dataset/train.csv"  # Change to the actual location
+        BATCH_SIZE = 32
+        DEVICE = "cuda:0"
+        SCALING_REQUIRED = True
 
-        print(f"[INFO] Loading dataset from: {args.data}")
-        device = torch.device(args.device)
+        OUTPUT_PATH = "/mnt/data/processed_dataset.pt"
 
-        dataloader = load_dataset(
-            args.data,
-            args.batch_size,
-            args.batch_size,
-            args.batch_size,
-            args.scaling_required
-        )
+        print(f"[INFO] Loading dataset from server path: {DATA_PATH}")
+        dataloader = load_dataset(DATA_PATH, BATCH_SIZE, BATCH_SIZE, BATCH_SIZE, SCALING_REQUIRED)
         scaler = dataloader['scaler']
 
-        # Ensure the directory exists
-        os.makedirs(os.path.dirname(args.outputpath1), exist_ok=True)
-
-        # Save the entire dataloader and scaler for later use
-        torch.save({'dataloader': dataloader, 'scaler': scaler}, args.outputpath1)
-        print(f"[SUCCESS] Saved dataset and scaler to {args.outputpath1}")
+        os.makedirs(os.path.dirname(OUTPUT_PATH), exist_ok=True)
+        torch.save({'dataloader': dataloader, 'scaler': scaler}, OUTPUT_PATH)
+        print(f"[SUCCESS] Dataset saved to {OUTPUT_PATH}")
         PYCODE
-    args:
-      - --data
-      - { inputValue: data }
-      - --batch_size
-      - { inputValue: batch_size }
-      - --device
-      - { inputValue: device }
-      - --scaling_required
-      - { inputValue: scaling_required }
-      - --outputpath1
-      - { outputPath: outputpath1 }
+    args: []
