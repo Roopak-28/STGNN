@@ -1,5 +1,5 @@
 name: Train STGNN Model
-description: Trains the STGNN model using the built model and configuration, saving the best version.
+description: Trains the STGNN model using the built model, configuration, and dataset, saving the best version.
 
 inputs:
   - name: model_name
@@ -8,7 +8,11 @@ inputs:
 
   - name: config_updated
     type: String
-    description: Updated configuration parameters in string format (output from build_model)
+    description: Updated configuration parameters file path (output from build_model)
+
+  - name: dataset_pth
+    type: String
+    description: Path to dataset file (output from load_dataset)
 
 outputs:
   - name: trained_model
@@ -23,13 +27,14 @@ implementation:
       - -c
       - |
         # Install dependencies
-        PIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet torch torchvision torchaudio torch_geometric numpy --user
+        PIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet torch torchvision torchaudio torch_geometric numpy pandas --user
 
         python3 -u - <<'PYCODE'
         import argparse
         import json
         import torch
         import numpy as np
+        import pandas as pd
         import os
         from trainer import Trainer
         from stgnn import stgnn
@@ -37,12 +42,17 @@ implementation:
         parser = argparse.ArgumentParser()
         parser.add_argument('--model_name', type=str, required=True)
         parser.add_argument('--config_updated', type=str, required=True)
+        parser.add_argument('--dataset_pth', type=str, required=True)
         parser.add_argument('--trained_model', type=str, required=True)
         args = parser.parse_args()
 
         # Load config
         with open(args.config_updated, "r") as f:
             config = json.load(f)
+
+        # Load dataset (placeholder for actual dataset loading logic)
+        dataset = pd.read_csv(args.dataset_pth)
+        print(f"Loaded dataset with shape: {dataset.shape}")
 
         # Fix random seeds for reproducibility
         runid = 0
@@ -58,18 +68,10 @@ implementation:
         print("--- Starting Training ---")
         min_val_loss = 1e5
         scaler = None
-        dataloader = None  # Assuming data loader comes from elsewhere in actual pipeline
+        dataloader = None  # Replace with actual data loader logic
 
-        # Dummy placeholders (replace with your real dataloader usage in final integration)
-        # Example structure:
-        # dataloader = load_dataset(...)
-        # scaler = dataloader['scaler']
-        # engine = Trainer(model, ...)
-        # model = stgnn(...)
-
-        # For now, simulate saving the best model
+        # Simulate saving the best model
         torch.save({"model_name": args.model_name, "config": config}, args.trained_model)
-
         print(f"Trained model saved to {args.trained_model}")
         PYCODE
     args:
@@ -77,5 +79,7 @@ implementation:
       - { inputValue: model_name }
       - --config_updated
       - { inputValue: config_updated }
+      - --dataset_pth
+      - { inputValue: dataset_pth }
       - --trained_model
       - { outputPath: trained_model }
