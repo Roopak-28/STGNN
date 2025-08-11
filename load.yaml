@@ -1,8 +1,6 @@
 name: Load Server Dataset
 description: Automatically loads the dataset from the server machine, processes it, and saves it as a PyTorch .pt file for downstream tasks.
 
-inputs: []
-
 outputs:
   - name: outputpath1
     type: String
@@ -23,15 +21,15 @@ implementation:
         python3 -u - <<'PYCODE'
         import os
         import torch
+        import sys
         from my_dataset_module import load_dataset  # Replace with your actual dataset loader
 
-        # Fixed settings for server dataset
+        OUTPUT_PATH = sys.argv[1]
+
         DATA_PATH = "/mnt/data/server_dataset/train.csv"  # Change to the actual location
         BATCH_SIZE = 32
         DEVICE = "cuda:0"
         SCALING_REQUIRED = True
-
-        OUTPUT_PATH = "/mnt/data/processed_dataset.pt"
 
         print(f"[INFO] Loading dataset from server path: {DATA_PATH}")
         dataloader = load_dataset(DATA_PATH, BATCH_SIZE, BATCH_SIZE, BATCH_SIZE, SCALING_REQUIRED)
@@ -41,4 +39,6 @@ implementation:
         torch.save({'dataloader': dataloader, 'scaler': scaler}, OUTPUT_PATH)
         print(f"[SUCCESS] Dataset saved to {OUTPUT_PATH}")
         PYCODE
-    args: []
+    args:
+      - --outputpath1
+      - {outputPath: outputpath1}
