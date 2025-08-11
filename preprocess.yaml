@@ -41,41 +41,61 @@ implementation:
       - -c
       - |
         set -e
-        echo "Installing dependencies..."
-        pip install --no-cache-dir pandas numpy
+        # Install dependencies
+        PIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet pandas numpy --user
 
-        echo "Running preprocessing..."
-        python3 - <<'EOF'
+        # Run Python script
+        python3 -u - <<'PYCODE'
+        import argparse
         import pandas as pd
-        import sys
         import os
 
-        raw_dataset_pth = sys.argv[1]
-        output_dir = sys.argv[2]
-        train_pth = sys.argv[3]
-        test_pth = sys.argv[4]
-        anomaly_pth = sys.argv[5]
+        parser = argparse.ArgumentParser()
+        parser.add_argument('--raw_dataset_pth', type=str, required=True)
+        parser.add_argument('--output_dir', type=str, required=True)
+        parser.add_argument('--train_pth', type=str, required=True)
+        parser.add_argument('--test_pth', type=str, required=True)
+        parser.add_argument('--anomaly_pth', type=str, required=True)
+        parser.add_argument('--train_out', type=str, required=True)
+        parser.add_argument('--test_out', type=str, required=True)
+        parser.add_argument('--anomaly_out', type=str, required=True)
+        args = parser.parse_args()
 
-        os.makedirs(output_dir, exist_ok=True)
+        os.makedirs(args.output_dir, exist_ok=True)
 
-        df = pd.read_csv(raw_dataset_pth)
+        df = pd.read_csv(args.raw_dataset_pth)
 
         # Example split (replace with actual logic)
         train_df = df.sample(frac=0.7, random_state=42)
         test_df = df.drop(train_df.index)
         anomaly_df = df[df['label'] == 'anomaly'] if 'label' in df.columns else pd.DataFrame()
 
-        train_df.to_csv(train_pth, index=False)
-        test_df.to_csv(test_pth, index=False)
-        anomaly_df.to_csv(anomaly_pth, index=False)
+        train_df.to_csv(args.train_out, index=False)
+        test_df.to_csv(args.test_out, index=False)
+        anomaly_df.to_csv(args.anomaly_out, index=False)
 
-        print(f"train_out={train_pth}")
-        print(f"test_out={test_pth}")
-        print(f"anomaly_out={anomaly_pth}")
-        EOF
+        print(f"[INFO] Unused input train_pth = {args.train_pth}")
+        print(f"[INFO] Unused input test_pth = {args.test_pth}")
+        print(f"[INFO] Unused input anomaly_pth = {args.anomaly_pth}")
+
+        print(f"[SUCCESS] Train saved to: {args.train_out}")
+        print(f"[SUCCESS] Test saved to: {args.test_out}")
+        print(f"[SUCCESS] Anomaly saved to: {args.anomaly_out}")
+        PYCODE
     args:
-      - { inputValue: raw_dataset_pth }
-      - { inputValue: output_dir }
-      - { inputValue: train_pth }
-      - { inputValue: test_pth }
-      - { inputValue: anomaly_pth }
+      - --raw_dataset_pth
+      - {inputValue: raw_dataset_pth}
+      - --output_dir
+      - {inputValue: output_dir}
+      - --train_pth
+      - {inputValue: train_pth}
+      - --test_pth
+      - {inputValue: test_pth}
+      - --anomaly_pth
+      - {inputValue: anomaly_pth}
+      - --train_out
+      - {outputPath: train_out}
+      - --test_out
+      - {outputPath: test_out}
+      - --anomaly_out
+      - {outputPath: anomaly_out}
