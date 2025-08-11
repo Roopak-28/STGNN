@@ -1,0 +1,76 @@
+name: Preprocess Server Machine Dataset
+description: Preprocesses the server machine dataset and generates training, test, and anomaly label files.
+
+inputs:
+  - name: output_dir
+    type: String
+    description: Directory to save processed dataset files
+    default: data/machine-1-1
+
+  - name: train_path
+    type: String
+    description: Path to save training data file (.pkl)
+    default: generate_data/machine-1-1_train.pkl
+
+  - name: test_path
+    type: String
+    description: Path to save test data file (.pkl)
+    default: generate_data/machine-1-1_test.pkl
+
+  - name: anomaly_path
+    type: String
+    description: Path to save anomaly label file (.pkl)
+    default: generate_data/machine-1-1_test_label.pkl
+
+  - name: window_size
+    type: Integer
+    description: Sliding window size for preprocessing
+    default: 100
+
+  - name: val_ratio
+    type: Float
+    description: Validation split ratio
+    default: 0.3
+
+outputs:
+  - name: processed_out
+    type: String
+    description: Directory containing processed dataset files
+
+implementation:
+  container:
+    image: python:3.9
+    command:
+      - sh
+      - -c
+      - |
+        # Install dependencies (if needed)
+        PIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet pandas numpy torch --user
+
+        # Run preprocessing script
+        python3 generate_data/generate_training_data.py \
+          --output_dir "${{inputs.output_dir}}" \
+          --train_path "${{inputs.train_path}}" \
+          --test_path "${{inputs.test_path}}" \
+          --anomaly_path "${{inputs.anomaly_path}}" \
+          --window_size "${{inputs.window_size}}" \
+          --val_ratio "${{inputs.val_ratio}}"
+
+        # Copy output dir path for downstream bricks
+        echo "${{inputs.output_dir}}" > "${{outputs.processed_out}}"
+
+    args:
+      - --output_dir
+      - { inputValue: output_dir }
+      - --train_path
+      - { inputValue: train_path }
+      - --test_path
+      - { inputValue: test_path }
+      - --anomaly_path
+      - { inputValue: anomaly_path }
+      - --window_size
+      - { inputValue: window_size }
+      - --val_ratio
+      - { inputValue: val_ratio }
+      - --processed_out
+      - { outputPath: processed_out }

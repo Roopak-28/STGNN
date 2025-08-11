@@ -1,0 +1,110 @@
+name: Build STGNN Model
+description: Builds the STGNN model using the preprocessed dataset and a provided config string.
+
+inputs:
+  - name: preprocessed_data
+    type: String
+    description: Path to the preprocessed dataset (output from preprocess brick)
+
+  - name: config_str
+    type: String
+    description: Model configuration parameters in string format
+
+outputs:
+  - name: model_name
+    type: String
+    description: Name of the created model
+
+  - name: config_updated
+    type: String
+    description: Updated configuration after model build
+
+implementation:
+  container:
+    image: python:3.9
+    command:
+      - sh
+      - -c
+      - |
+        # Install dependencies
+        PIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet torch torchvision torchaudio torch_geometric --user
+
+        python3 -u - <<'PYCODE'
+        import argparse
+        import torch
+        from stgnn import stgnn
+        from trainer import Trainer
+        import json
+
+        parser = argparse.ArgumentParser()
+        parser.add_argument('--preprocessed_data', type=str, required=True)
+        parser.add_argument('--config_str', type=str, required=True)
+        parser.add_argument('--model_name', type=str, required=True)
+        parser.add_argument('--config_updated', type=str, required=True)
+        args = parser.parse_args()
+
+        # Parse config
+        config = json.loads(args.config_str)
+
+        # Load scaler from dataset if available
+        data = torch.load(args.preprocessed_data)
+        scaler = data.get('scaler', None)
+
+        device = torch.device(config.get("device", "cpu"))
+
+        # Build model
+        model = stgnn(
+            config["gcn_true"],
+            config["buildA_true"],
+            config["gcn_depth"],
+            config["num_nodes"],
+            device,
+            predefined_A=None,
+            dropout=config["dropout"],
+            subgraph_size=config["subgraph_size"],
+            node_dim=config["node_dim"],
+            dilation_exponential=config["dilation_exponential"],
+            conv_channels=config["conv_channels"],
+            residual_channels=config["residual_channels"],
+            skip_channels=config["skip_channels"],
+            end_channels=config["end_channels"],
+            seq_length=config["seq_in_len"],
+            in_dim=config["in_dim"],
+            out_dim=config["seq_out_len"],
+            layers=config["layers"],
+            propalpha=config["propalpha"],
+            tanhalpha=config["tanhalpha"],
+            layer_norm_affline=True
+        )
+
+        engine = Trainer(
+            model,
+            config["learning_rate"],
+            config["weight_decay"],
+            config["clip"],
+            config["step_size1"],
+            config["seq_out_len"],
+            scaler,
+            device,
+            config["scaling_required"]
+        )
+
+        # Output model name and updated config
+        with open(args.model_name, "w") as f:
+            f.write("TGCN")
+
+        with open(args.config_updated, "w") as f:
+            json.dump(config, f)
+
+        print("[SUCCESS] Model built and config updated.")
+
+        PYCODE
+    args:
+      - --preprocessed_data
+      - { inputValue: preprocessed_data }
+      - --config_str
+      - { inputValue: config_str }
+      - --model_name
+      - { outputPath: model_name }
+      - --config_updated
+      - { outputPath: config_updated }
