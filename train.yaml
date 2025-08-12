@@ -3,7 +3,7 @@ description: Trains the STGNN model using the built model, configuration, and da
 
 inputs:
   - name: model_name
-    type: String
+    type: Model
     description: Name of the model to be trained (output from build_model)
 
   - name: config_updated
