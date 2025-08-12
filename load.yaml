@@ -1,5 +1,5 @@
 name: Load Server Dataset
-description: Automatically loads the dataset from the server machine, processes it, and saves it as a PyTorch .pt file for downstream tasks.
+description: Automatically downloads a dataset from Kaggle, processes it, and saves it as a PyTorch .pt file for downstream tasks.
 
 outputs:
   - name: outputpath1
@@ -14,31 +14,50 @@ implementation:
       - -c
       - |
         set -e
-        # Install dependencies
-        PIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet torch torchvision torchaudio pandas --user
+        apt-get update && apt-get install -y unzip
 
-        # Run Python script
-        python3 -u - <<'PYCODE'
+        # Install dependencies
+        PIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet kaggle torch torchvision torchaudio pandas --user
+
+        # Ensure Kaggle API key is present
+        mkdir -p ~/.kaggle
+        cp /mnt/secrets/kaggle.json ~/.kaggle/kaggle.json
+        chmod 600 ~/.kaggle/kaggle.json
+
+        # Download dataset from Kaggle (example: Titanic dataset)
+        mkdir -p /mnt/data/server_dataset
+        kaggle datasets download -d mgusat/smd-onmiad -p /mnt/data/server_dataset
+        unzip -o /mnt/data/server_dataset/*.zip -d /mnt/data/server_dataset
+
+        # Run Python script with proper argument passing
+        python3 -u - --outputpath1 "$0" <<'PYCODE'
+        import argparse
         import os
         import torch
-        import sys
         from my_dataset_module import load_dataset  # Replace with your actual dataset loader
 
-        OUTPUT_PATH = sys.argv[1]
+        parser = argparse.ArgumentParser()
+        parser.add_argument('--outputpath1', type=str, required=True)
+        args = parser.parse_args()
 
-        DATA_PATH = "/mnt/data/server_dataset/train.csv"  # Change to the actual location
+        DATA_PATH = "/mnt/data/server_dataset/train.csv"  # From the Kaggle download
         BATCH_SIZE = 32
         DEVICE = "cuda:0"
         SCALING_REQUIRED = True
 
-        print(f"[INFO] Loading dataset from server path: {DATA_PATH}")
+        print(f"[INFO] Loading dataset from: {DATA_PATH}")
         dataloader = load_dataset(DATA_PATH, BATCH_SIZE, BATCH_SIZE, BATCH_SIZE, SCALING_REQUIRED)
         scaler = dataloader['scaler']
 
-        os.makedirs(os.path.dirname(OUTPUT_PATH), exist_ok=True)
-        torch.save({'dataloader': dataloader, 'scaler': scaler}, OUTPUT_PATH)
-        print(f"[SUCCESS] Dataset saved to {OUTPUT_PATH}")
+        os.makedirs(os.path.dirname(args.outputpath1), exist_ok=True)
+        torch.save({'dataloader': dataloader, 'scaler': scaler}, args.outputpath1)
+        print(f"[SUCCESS] Dataset saved to {args.outputpath1}")
+
+        # Write output path for Kubeflow
+        os.makedirs("/tmp/outputs/outputpath1", exist_ok=True)
+        with open('/tmp/outputs/outputpath1/data', 'w') as f:
+            f.write(args.outputpath1)
+        print(f"[INFO] Output path written to /tmp/outputs/outputpath1/data")
         PYCODE
     args:
-      - --outputpath1
       - {outputPath: outputpath1}
