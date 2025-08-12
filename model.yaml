@@ -10,6 +10,10 @@ inputs:
     type: String
     description: Model configuration parameters in string format
 
+  - name: model_name
+    type: String
+    description: Name of the model file to create
+
 outputs:
   - name: model_name
     type: String
@@ -35,6 +39,7 @@ implementation:
         from stgnn import stgnn
         from trainer import Trainer
         import json
+        import os
 
         parser = argparse.ArgumentParser()
         parser.add_argument('--preprocessed_data', type=str, required=True)
@@ -89,6 +94,8 @@ implementation:
             config["scaling_required"]
         )
 
+        os.makedirs(os.path.dirname(args.model_name) or ".", exist_ok=True)
+
         # Output model name and updated config
         with open(args.model_name, "w") as f:
             f.write("TGCN")
@@ -96,15 +103,16 @@ implementation:
         with open(args.config_updated, "w") as f:
             json.dump(config, f)
 
-        print("[SUCCESS] Model built and config updated.")
-
+        print(f"[SUCCESS] Model saved to {args.model_name} and config updated to {args.config_updated}")
         PYCODE
     args:
       - --preprocessed_data
-      - { inputValue: preprocessed_data }
+      - {inputValue: preprocessed_data}
       - --config_str
-      - { inputValue: config_str }
+      - {inputValue: config_str}
       - --model_name
-      - { outputPath: model_name }
+      - {inputValue: model_name}
+      - --model_name
+      - {outputPath: model_name}
       - --config_updated
-      - { outputPath: config_updated }
+      - {outputPath: config_updated}
