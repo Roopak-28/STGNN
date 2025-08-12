@@ -8,19 +8,15 @@ inputs:
   - name: output_dir
     type: String
     description: Directory to store processed datasets.
-    default: ./output/
   - name: train_pth
     type: String
     description: Path to save processed training set.
-    default: ./output/train.csv
   - name: test_pth
     type: String
     description: Path to save processed testing set.
-    default: ./output/test.csv
   - name: anomaly_pth
     type: String
     description: Path to save processed anomaly set.
-    default: ./output/anomaly.csv
 
 outputs:
   - name: train_out
@@ -74,9 +70,9 @@ implementation:
         test_df.to_csv(args.test_out, index=False)
         anomaly_df.to_csv(args.anomaly_out, index=False)
 
-        print(f"[INFO] Unused input train_pth = {args.train_pth}")
-        print(f"[INFO] Unused input test_pth = {args.test_pth}")
-        print(f"[INFO] Unused input anomaly_pth = {args.anomaly_pth}")
+        print(f"[INFO] Using input train_pth = {args.train_pth}")
+        print(f"[INFO] Using input test_pth = {args.test_pth}")
+        print(f"[INFO] Using input anomaly_pth = {args.anomaly_pth}")
 
         print(f"[SUCCESS] Train saved to: {args.train_out}")
         print(f"[SUCCESS] Test saved to: {args.test_out}")
