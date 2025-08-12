@@ -15,9 +15,9 @@ inputs:
     description: Name of the model file to create
 
 outputs:
-  - name: model_name
+  - name: model_out
     type: String
-    description: Name of the created model
+    description: Path where the created model is saved
 
   - name: config_updated
     type: String
@@ -45,6 +45,7 @@ implementation:
         parser.add_argument('--preprocessed_data', type=str, required=True)
         parser.add_argument('--config_str', type=str, required=True)
         parser.add_argument('--model_name', type=str, required=True)
+        parser.add_argument('--model_out', type=str, required=True)
         parser.add_argument('--config_updated', type=str, required=True)
         args = parser.parse_args()
 
@@ -94,16 +95,16 @@ implementation:
             config["scaling_required"]
         )
 
-        os.makedirs(os.path.dirname(args.model_name) or ".", exist_ok=True)
+        os.makedirs(os.path.dirname(args.model_out) or ".", exist_ok=True)
 
         # Output model name and updated config
-        with open(args.model_name, "w") as f:
+        with open(args.model_out, "w") as f:
             f.write("TGCN")
 
         with open(args.config_updated, "w") as f:
             json.dump(config, f)
 
-        print(f"[SUCCESS] Model saved to {args.model_name} and config updated to {args.config_updated}")
+        print(f"[SUCCESS] Model saved to {args.model_out} and config updated to {args.config_updated}")
         PYCODE
     args:
       - --preprocessed_data
@@ -112,7 +113,7 @@ implementation:
       - {inputValue: config_str}
       - --model_name
       - {inputValue: model_name}
-      - --model_name
-      - {outputPath: model_name}
+      - --model_out
+      - {outputPath: model_out}
       - --config_updated
       - {outputPath: config_updated}
