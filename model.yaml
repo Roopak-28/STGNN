@@ -16,7 +16,7 @@ inputs:
 
 outputs:
   - name: model_out
-    type: String
+    type: Model
     description: Path where the created model is saved
 
   - name: config_updated
