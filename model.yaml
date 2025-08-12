@@ -30,6 +30,10 @@ implementation:
       - sh
       - -c
       - |
+        # Clone the CST-GL repo to get the STGNN model code
+        git clone https://github.com/huankoh/CST-GL
+        cd CST-GL || exit 1
+
         # Install dependencies
         PIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet torch torchvision torchaudio torch_geometric --user
 
