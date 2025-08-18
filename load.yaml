@@ -16,14 +16,6 @@ implementation:
   container:
     image: python:3.9
     command:
-      - sh
-      - -c
-      - |
-        set -e
-        apt-get update && apt-get install -y git unzip wget
-        PIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet torch torchvision torchaudio pandas scikit-learn || \
-        PIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet torch torchvision torchaudio pandas scikit-learn --user
-        exec "$0" "$@"
       - python3
       - -u
       - -c
