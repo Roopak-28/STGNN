@@ -1,10 +1,8 @@
-name: Load Server Dataset
-description: Automatically downloads a dataset from Kaggle, processes it, and saves it as a PyTorch .pt file for downstream tasks.
+name: Load Server Machine Dataset
+description: Downloads the Server Machine Dataset (SMD) from the OmniAnomaly GitHub repo, processes it, and saves it as a PyTorch dataset.
 
 outputs:
-  - name: outputpath1
-    type: String
-    description: Path to the saved dataset file (.pt)
+  - {name: smd_data, type: Dataset}
 
 implementation:
   container:
@@ -13,51 +11,73 @@ implementation:
       - sh
       - -c
       - |
-        set -e
-        apt-get update && apt-get install -y unzip
-
-        # Install dependencies
-        PIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet kaggle torch torchvision torchaudio pandas --user
-
-        # Ensure Kaggle API key is present
-        mkdir -p ~/.kaggle
-        cp /mnt/secrets/kaggle.json ~/.kaggle/kaggle.json
-        chmod 600 ~/.kaggle/kaggle.json
-
-        # Download dataset from Kaggle (example: Titanic dataset)
-        mkdir -p /mnt/data/server_dataset
-        kaggle datasets download -d mgusat/smd-onmiad -p /mnt/data/server_dataset
-        unzip -o /mnt/data/server_dataset/*.zip -d /mnt/data/server_dataset
-
-        # Run Python script with proper argument passing
-        python3 -u - --outputpath1 "$0" <<'PYCODE'
+        apt-get update && apt-get install -y git unzip wget
+        PIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet torch torchvision torchaudio pandas scikit-learn || \
+        PIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet torch torchvision torchaudio pandas scikit-learn --user
+        exec "$0" "$@"
+      - python3
+      - -u
+      - -c
+      - |
         import argparse
         import os
+        import pickle
+        import numpy as np
+        import pandas as pd
         import torch
-        from my_dataset_module import load_dataset  # Replace with your actual dataset loader
+        from sklearn.preprocessing import StandardScaler
 
         parser = argparse.ArgumentParser()
-        parser.add_argument('--outputpath1', type=str, required=True)
+        parser.add_argument('--smd_data', type=str, required=True)
         args = parser.parse_args()
 
-        DATA_PATH = "/mnt/data/server_dataset/train.csv"  # From the Kaggle download
-        BATCH_SIZE = 32
-        DEVICE = "cuda:0"
-        SCALING_REQUIRED = True
+        print("[INFO] Downloading Server Machine Dataset (SMD) from OmniAnomaly GitHub...")
+        os.makedirs("/tmp/smd", exist_ok=True)
+        os.system("git clone --depth=1 https://github.com/NetManAIOps/OmniAnomaly.git /tmp/omni")
 
-        print(f"[INFO] Loading dataset from: {DATA_PATH}")
-        dataloader = load_dataset(DATA_PATH, BATCH_SIZE, BATCH_SIZE, BATCH_SIZE, SCALING_REQUIRED)
-        scaler = dataloader['scaler']
+        smd_path = "/tmp/omni/ServerMachineDataset"
+        train_files = sorted([os.path.join(smd_path, "train", f) for f in os.listdir(os.path.join(smd_path, "train")) if f.endswith(".txt")])
+        test_files = sorted([os.path.join(smd_path, "test", f) for f in os.listdir(os.path.join(smd_path, "test")) if f.endswith(".txt")])
+        label_files = sorted([os.path.join(smd_path, "test_label", f) for f in os.listdir(os.path.join(smd_path, "test_label")) if f.endswith(".txt")])
 
-        os.makedirs(os.path.dirname(args.outputpath1), exist_ok=True)
-        torch.save({'dataloader': dataloader, 'scaler': scaler}, args.outputpath1)
-        print(f"[SUCCESS] Dataset saved to {args.outputpath1}")
+        print(f"[INFO] Found {len(train_files)} train files, {len(test_files)} test files")
 
-        # Write output path for Kubeflow
-        os.makedirs("/tmp/outputs/outputpath1", exist_ok=True)
-        with open('/tmp/outputs/outputpath1/data', 'w') as f:
-            f.write(args.outputpath1)
-        print(f"[INFO] Output path written to /tmp/outputs/outputpath1/data")
-        PYCODE
+        # Load all train/test files into tensors
+        def load_smd_file(path):
+            df = pd.read_csv(path, header=None, sep=",")
+            return df.values.astype(np.float32)
+
+        train_data = [load_smd_file(f) for f in train_files]
+        test_data = [load_smd_file(f) for f in test_files]
+        test_labels = [load_smd_file(f) for f in label_files]
+
+        # Normalize each machine's data
+        scaler = StandardScaler()
+        train_data = [scaler.fit_transform(x) for x in train_data]
+        test_data = [scaler.transform(x) for x in test_data]
+
+        # Convert to torch tensors
+        train_tensors = [torch.tensor(x) for x in train_data]
+        test_tensors = [torch.tensor(x) for x in test_data]
+        label_tensors = [torch.tensor(x) for x in test_labels]
+
+        dataset = {
+            "train": train_tensors,
+            "test": test_tensors,
+            "labels": label_tensors,
+            "scaler_mean": scaler.mean_.tolist(),
+            "scaler_scale": scaler.scale_.tolist()
+        }
+
+        # Ensure output directory
+        os.makedirs(os.path.dirname(args.smd_data), exist_ok=True)
+
+        # Save dataset object
+        with open(args.smd_data, "wb") as f:
+            pickle.dump(dataset, f)
+
+        print(f"[SUCCESS] Saved Server Machine Dataset to {args.smd_data}")
+
     args:
-      - {outputPath: outputpath1}
+      - --smd_data
+      - {outputPath: smd_data}
