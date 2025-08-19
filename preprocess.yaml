@@ -37,14 +37,13 @@ implementation:
       - -c
       - |
         set -e
-        # Install dependencies
         PIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet pandas numpy --user
-
-        # Run Python script
-        python3 -u - <<'PYCODE'
-        import argparse
-        import pandas as pd
-        import os
+        exec "$0" "$@"
+      - python3
+      - -u
+      - -c
+      - |
+        import argparse, os, pandas as pd
 
         parser = argparse.ArgumentParser()
         parser.add_argument('--raw_dataset_pth', type=str, required=True)
@@ -58,33 +57,36 @@ implementation:
         args = parser.parse_args()
 
         os.makedirs(args.output_dir, exist_ok=True)
+        os.makedirs(os.path.dirname(args.train_pth), exist_ok=True)
+        os.makedirs(os.path.dirname(args.test_pth), exist_ok=True)
+        os.makedirs(os.path.dirname(args.anomaly_pth), exist_ok=True)
 
-        # Read actual dataset path from the path-only file
+        # Read dataset path string from previous component
         with open(args.raw_dataset_pth, "r") as f:
             real_dataset_path = f.read().strip()
         print(f"[INFO] Resolved raw dataset path = {real_dataset_path}")
 
+        # Load dataset
         df = pd.read_csv(real_dataset_path)
 
-        # Example split (replace with actual logic)
+        # Example splits (adjust logic as needed)
         train_df = df.sample(frac=0.7, random_state=42)
         test_df = df.drop(train_df.index)
         anomaly_df = df[df['label'] == 'anomaly'] if 'label' in df.columns else pd.DataFrame()
 
-        # Save to provided paths
+        # Save processed data
         train_df.to_csv(args.train_pth, index=False)
         test_df.to_csv(args.test_pth, index=False)
         anomaly_df.to_csv(args.anomaly_pth, index=False)
 
-        # Write the paths into Kubeflow outputs
+        # Emit output artifact paths
         with open(args.train_out, "w") as f: f.write(args.train_pth)
         with open(args.test_out, "w") as f: f.write(args.test_pth)
         with open(args.anomaly_out, "w") as f: f.write(args.anomaly_pth)
 
-        print(f"[SUCCESS] Train saved to: {args.train_pth}")
-        print(f"[SUCCESS] Test saved to: {args.test_pth}")
-        print(f"[SUCCESS] Anomaly saved to: {args.anomaly_pth}")
-        PYCODE
+        print(f"[SUCCESS] Train saved to {args.train_pth}")
+        print(f"[SUCCESS] Test saved to {args.test_pth}")
+        print(f"[SUCCESS] Anomaly saved to {args.anomaly_pth}")
     args:
       - --raw_dataset_pth
       - {inputPath: raw_dataset_pth}
