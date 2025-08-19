@@ -3,30 +3,30 @@ description: Preprocesses dataset from load_dataset brick and prepares output pa
 
 inputs:
   - name: raw_dataset_pth
-    type: String
+    type: Path
     description: Path to raw dataset output from load_dataset brick.
   - name: output_dir
-    type: String
+    type: Path
     description: Directory to store processed datasets.
   - name: train_pth
-    type: String
+    type: Path
     description: Path to save processed training set.
   - name: test_pth
-    type: String
+    type: Path
     description: Path to save processed testing set.
   - name: anomaly_pth
-    type: String
+    type: Path
     description: Path to save processed anomaly set.
 
 outputs:
   - name: train_out
-    type: String
+    type: Path
     description: Processed training dataset path.
   - name: test_out
-    type: String
+    type: Path
     description: Processed testing dataset path.
   - name: anomaly_out
-    type: String
+    type: Path
     description: Processed anomaly dataset path.
 
 implementation:
