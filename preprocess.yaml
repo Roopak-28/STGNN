@@ -6,27 +6,27 @@ inputs:
     type: Path
     description: Path to raw dataset output from load_dataset brick.
   - name: output_dir
-    type: Path
+    type: String
     description: Directory to store processed datasets.
   - name: train_pth
-    type: Path
+    type: String
     description: Path to save processed training set.
   - name: test_pth
-    type: Path
+    type: String
     description: Path to save processed testing set.
   - name: anomaly_pth
-    type: Path
+    type: String
     description: Path to save processed anomaly set.
 
 outputs:
   - name: train_out
-    type: Path
+    type: String
     description: Processed training dataset path.
   - name: test_out
-    type: Path
+    type: String
     description: Processed testing dataset path.
   - name: anomaly_out
-    type: Path
+    type: String
     description: Processed anomaly dataset path.
 
 implementation:
@@ -83,22 +83,4 @@ implementation:
 
         print(f"[SUCCESS] Train saved to: {args.train_pth}")
         print(f"[SUCCESS] Test saved to: {args.test_pth}")
-        print(f"[SUCCESS] Anomaly saved to: {args.anomaly_pth}")
-        PYCODE
-    args:
-      - --raw_dataset_pth
-      - {inputValue: raw_dataset_pth}
-      - --output_dir
-      - {inputValue: output_dir}
-      - --train_pth
-      - {inputValue: train_pth}
-      - --test_pth
-      - {inputValue: test_pth}
-      - --anomaly_pth
-      - {inputValue: anomaly_pth}
-      - --train_out
-      - {outputPath: train_out}
-      - --test_out
-      - {outputPath: test_out}
-      - --anomaly_out
-      - {outputPath: anomaly_out}
+        print(f"[SUCCESS] Anomaly saved
