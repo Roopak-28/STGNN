@@ -44,7 +44,7 @@ implementation:
         print(f"[SUCCESS] Test path: {test_path}")
         print(f"[SUCCESS] Labels path: {labels_path}")
 
-        # 🚨 Write only the path string into output files
+        # Write only the path string into output files
         with open(args.train_csv, "w") as f:
             f.write(train_path)
         with open(args.test_csv, "w") as f:
