@@ -1,5 +1,5 @@
 name: Load Server Machine Dataset
-description: Downloads the Server Machine Dataset (SMD) from the OmniAnomaly GitHub repo, processes it, and saves train/test/label CSV files for downstream tasks.
+description: Downloads the Server Machine Dataset (SMD), processes it, and saves train/test/label CSV files for downstream tasks.
 
 outputs:
   - name: train_csv
@@ -19,63 +19,104 @@ implementation:
       - sh
       - -c
       - |
-        set -e
-        # Install dependencies
-        pip install --no-cache-dir pandas numpy scikit-learn gitpython
+        set -euo pipefail
 
-        python -u - <<'EOF'
+        # System deps needed for download
+        apt-get update
+        apt-get install -y --no-install-recommends curl ca-certificates
+        rm -rf /var/lib/apt/lists/*
+
+        # Python deps
+        pip install --no-cache-dir pandas numpy scikit-learn
+
+        # Write the Python script to a file so we can pass "$@" args
+        cat >/tmp/main.py <<'PY'
 import argparse
 import os
+import sys
 import pandas as pd
-import numpy as np
 from sklearn.preprocessing import StandardScaler
 
-parser = argparse.ArgumentParser()
-parser.add_argument('--train_csv', type=str, required=True)
-parser.add_argument('--test_csv', type=str, required=True)
-parser.add_argument('--labels_csv', type=str, required=True)
-args = parser.parse_args()
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--train_csv', type=str, required=True)
+    parser.add_argument('--test_csv', type=str, required=True)
+    parser.add_argument('--labels_csv', type=str, required=True)
+    args = parser.parse_args()
 
-print("[INFO] Downloading Server Machine Dataset (SMD) from OmniAnomaly GitHub...")
-os.makedirs("/tmp/smd", exist_ok=True)
-os.system("git clone --depth=1 https://github.com/NetManAIOps/OmniAnomaly.git /tmp/omni")
+    # Download and extract SMD (Dropbox mirror used by many libs)
+    url = "https://www.dropbox.com/s/x53ph5cru62kv0f/ServerMachineDataset.tar.gz?dl=1"
+    download_tar = "/tmp/ServerMachineDataset.tar.gz"
+    extract_dir = "/tmp/smd"
+    smd_path = os.path.join(extract_dir, "ServerMachineDataset")
 
-smd_path = "/tmp/omni/ServerMachineDataset"
-train_files = sorted([os.path.join(smd_path, "train", f) for f in os.listdir(os.path.join(smd_path, "train")) if f.endswith(".txt")])
-test_files = sorted([os.path.join(smd_path, "test", f) for f in os.listdir(os.path.join(smd_path, "test")) if f.endswith(".txt")])
-label_files = sorted([os.path.join(smd_path, "test_label", f) for f in os.listdir(os.path.join(smd_path, "test_label")) if f.endswith(".txt")])
+    os.makedirs(extract_dir, exist_ok=True)
+    print("[INFO] Downloading SMD tar.gz ...")
+    rc = os.system(f"curl -L -o {download_tar} '{url}'")
+    if rc != 0 or not os.path.exists(download_tar):
+        print("[ERROR] Failed to download SMD archive.", file=sys.stderr)
+        sys.exit(1)
 
-print(f"[INFO] Found {len(train_files)} train files, {len(test_files)} test files, {len(label_files)} label files")
+    print("[INFO] Extracting SMD ...")
+    rc = os.system(f"tar -xzf {download_tar} -C {extract_dir}")
+    if rc != 0 or not os.path.isdir(smd_path):
+        print(f"[ERROR] Failed to extract SMD to {smd_path}", file=sys.stderr)
+        sys.exit(1)
 
-def load_smd_file(path):
-    return pd.read_csv(path, header=None)
+    train_dir = os.path.join(smd_path, "train")
+    test_dir = os.path.join(smd_path, "test")
+    label_dir = os.path.join(smd_path, "test_label")
 
-train_dfs = [load_smd_file(f) for f in train_files]
-test_dfs = [load_smd_file(f) for f in test_files]
-label_dfs = [load_smd_file(f) for f in label_files]
+    if not (os.path.isdir(train_dir) and os.path.isdir(test_dir) and os.path.isdir(label_dir)):
+        print("[ERROR] Expected train/test/test_label directories not found.", file=sys.stderr)
+        sys.exit(1)
 
-# Concatenate all machines together
-train_all = pd.concat(train_dfs, ignore_index=True)
-test_all = pd.concat(test_dfs, ignore_index=True)
-labels_all = pd.concat(label_dfs, ignore_index=True)
+    def list_txt(d):
+        return sorted([os.path.join(d, f) for f in os.listdir(d) if f.endswith(".txt")])
 
-# Normalize features
-scaler = StandardScaler()
-train_scaled = pd.DataFrame(scaler.fit_transform(train_all))
-test_scaled = pd.DataFrame(scaler.transform(test_all))
+    train_files = list_txt(train_dir)
+    test_files  = list_txt(test_dir)
+    label_files = list_txt(label_dir)
 
-# Ensure output directory
-os.makedirs(os.path.dirname(args.train_csv), exist_ok=True)
+    print(f"[INFO] Found {len(train_files)} train, {len(test_files)} test, {len(label_files)} label files.")
 
-# Save CSVs
-train_scaled.to_csv(args.train_csv, index=False)
-test_scaled.to_csv(args.test_csv, index=False)
-labels_all.to_csv(args.labels_csv, index=False)
+    if not train_files or not test_files or not label_files:
+        print("[ERROR] Missing files in SMD directories.", file=sys.stderr)
+        sys.exit(1)
 
-print(f"[SUCCESS] Train saved to {args.train_csv}")
-print(f"[SUCCESS] Test saved to {args.test_csv}")
-print(f"[SUCCESS] Labels saved to {args.labels_csv}")
-EOF
+    def load_df(p): return pd.read_csv(p, header=None)
+
+    train_all = pd.concat([load_df(p) for p in train_files], ignore_index=True)
+    test_all  = pd.concat([load_df(p) for p in test_files],  ignore_index=True)
+    labels_all = pd.concat([load_df(p) for p in label_files], ignore_index=True)
+
+    print(f"[INFO] Shapes -> train: {train_all.shape}, test: {test_all.shape}, labels: {labels_all.shape}")
+
+    # Normalize using training stats
+    scaler = StandardScaler()
+    train_scaled = pd.DataFrame(scaler.fit_transform(train_all))
+    test_scaled  = pd.DataFrame(scaler.transform(test_all))
+
+    # Ensure output dirs exist (Kubeflow maps these to /tmp/outputs/.../data)
+    for p in (args.train_csv, args.test_csv, args.labels_csv):
+        odir = os.path.dirname(p)
+        if odir:
+            os.makedirs(odir, exist_ok=True)
+
+    train_scaled.to_csv(args.train_csv, index=False)
+    test_scaled.to_csv(args.test_csv, index=False)
+    labels_all.to_csv(args.labels_csv, index=False)
+
+    print(f"[SUCCESS] Train -> {args.train_csv}")
+    print(f"[SUCCESS] Test  -> {args.test_csv}")
+    print(f"[SUCCESS] Labels-> {args.labels_csv}")
+
+if __name__ == "__main__":
+    main()
+PY
+
+        # Run script, forwarding Elyra/Kubeflow args
+        python -u /tmp/main.py "$@"
     args:
       - --train_csv
       - {outputPath: train_csv}
