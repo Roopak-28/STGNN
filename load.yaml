@@ -1,16 +1,10 @@
 name: Load Server Machine Dataset
-description: Downloads the Server Machine Dataset (SMD) and emits only the paths to train, test, and anomaly data directories.
+description: Downloads the Server Machine Dataset (SMD) and saves only the paths to train, test, and anomaly label directories.
 
 outputs:
-  - name: train_csv
-    type: Path
-    description: Path string to training dataset directory.
-  - name: test_csv
-    type: Path
-    description: Path string to testing dataset directory.
-  - name: labels_csv
-    type: Path
-    description: Path string to anomaly labels directory.
+  - {name: train_csv, type: Path, description: Path string to training dataset directory.}
+  - {name: test_csv, type: Path, description: Path string to testing dataset directory.}
+  - {name: labels_csv, type: Path, description: Path string to anomaly labels directory.}
 
 implementation:
   container:
@@ -19,13 +13,13 @@ implementation:
       - sh
       - -c
       - |
-        set -e
-        # Install git if missing
         apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/*
-
-        # Run Python script
-        python3 -u - <<'PYCODE'
-        import argparse, os
+        exec "$0" "$@"
+      - python3
+      - -u
+      - -c
+      - |
+        import argparse, os, sys
 
         parser = argparse.ArgumentParser()
         parser.add_argument("--train_csv", type=str, required=True)
@@ -44,14 +38,17 @@ implementation:
         print(f"[SUCCESS] Test path: {test_path}")
         print(f"[SUCCESS] Labels path: {labels_path}")
 
-        # Write only the path string into output files
-        with open(args.train_csv, "w") as f:
-            f.write(train_path)
-        with open(args.test_csv, "w") as f:
-            f.write(test_path)
-        with open(args.labels_csv, "w") as f:
-            f.write(labels_path)
-        PYCODE
+        # Ensure output dirs exist
+        os.makedirs(os.path.dirname(args.train_csv), exist_ok=True)
+        os.makedirs(os.path.dirname(args.test_csv), exist_ok=True)
+        os.makedirs(os.path.dirname(args.labels_csv), exist_ok=True)
+
+        # Write the paths into files (so downstream bricks can read them)
+        with open(args.train_csv, "w") as f: f.write(train_path)
+        with open(args.test_csv, "w") as f: f.write(test_path)
+        with open(args.labels_csv, "w") as f: f.write(labels_path)
+
+        print(f"[SUCCESS] Wrote output paths to: {args.train_csv}, {args.test_csv}, {args.labels_csv}")
     args:
       - --train_csv
       - {outputPath: train_csv}
