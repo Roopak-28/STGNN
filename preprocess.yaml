@@ -87,7 +87,7 @@ implementation:
         PYCODE
     args:
       - --raw_dataset_pth
-      - {inputValue: raw_dataset_pth}
+      - {inputPath: raw_dataset_pth}
       - --output_dir
       - {inputValue: output_dir}
       - --train_pth
@@ -97,8 +97,8 @@ implementation:
       - --anomaly_pth
       - {inputValue: anomaly_pth}
       - --train_out
-      - {outputPath: train_out}
+      - {outputValue: train_out}
       - --test_out
-      - {outputPath: test_out}
+      - {outputValue: test_out}
       - --anomaly_out
-      - {outputPath: anomaly_out}
+      - {outputValue: anomaly_out}
