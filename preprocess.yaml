@@ -71,17 +71,19 @@ implementation:
         test_df = df.drop(train_df.index)
         anomaly_df = df[df['label'] == 'anomaly'] if 'label' in df.columns else pd.DataFrame()
 
-        train_df.to_csv(args.train_out, index=False)
-        test_df.to_csv(args.test_out, index=False)
-        anomaly_df.to_csv(args.anomaly_out, index=False)
+        # Save to provided paths
+        train_df.to_csv(args.train_pth, index=False)
+        test_df.to_csv(args.test_pth, index=False)
+        anomaly_df.to_csv(args.anomaly_pth, index=False)
 
-        print(f"[INFO] Using input train_pth = {args.train_pth}")
-        print(f"[INFO] Using input test_pth = {args.test_pth}")
-        print(f"[INFO] Using input anomaly_pth = {args.anomaly_pth}")
+        # Write the paths into Kubeflow outputs
+        with open(args.train_out, "w") as f: f.write(args.train_pth)
+        with open(args.test_out, "w") as f: f.write(args.test_pth)
+        with open(args.anomaly_out, "w") as f: f.write(args.anomaly_pth)
 
-        print(f"[SUCCESS] Train saved to: {args.train_out}")
-        print(f"[SUCCESS] Test saved to: {args.test_out}")
-        print(f"[SUCCESS] Anomaly saved to: {args.anomaly_out}")
+        print(f"[SUCCESS] Train saved to: {args.train_pth}")
+        print(f"[SUCCESS] Test saved to: {args.test_pth}")
+        print(f"[SUCCESS] Anomaly saved to: {args.anomaly_pth}")
         PYCODE
     args:
       - --raw_dataset_pth
