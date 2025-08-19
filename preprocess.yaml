@@ -20,13 +20,13 @@ inputs:
 
 outputs:
   - name: train_out
-    type: String
+    type: Path
     description: Processed training dataset path.
   - name: test_out
-    type: String
+    type: Path
     description: Processed testing dataset path.
   - name: anomaly_out
-    type: String
+    type: Path
     description: Processed anomaly dataset path.
 
 implementation:
@@ -97,8 +97,8 @@ implementation:
       - --anomaly_pth
       - {inputValue: anomaly_pth}
       - --train_out
-      - {outputValue: train_out}
+      - {outputPath: train_out}
       - --test_out
-      - {outputValue: test_out}
+      - {outputPath: test_out}
       - --anomaly_out
-      - {outputValue: anomaly_out}
+      - {outputPath: anomaly_out}
