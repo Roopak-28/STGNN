@@ -3,13 +3,13 @@ description: Downloads the Server Machine Dataset (SMD) and emits only the paths
 
 outputs:
   - name: train_csv
-    type: String
+    type: Path
     description: Path string to training dataset directory.
   - name: test_csv
-    type: String
+    type: Path
     description: Path string to testing dataset directory.
   - name: labels_csv
-    type: String
+    type: Path
     description: Path string to anomaly labels directory.
 
 implementation:
