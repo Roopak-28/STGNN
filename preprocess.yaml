@@ -59,7 +59,12 @@ implementation:
 
         os.makedirs(args.output_dir, exist_ok=True)
 
-        df = pd.read_csv(args.raw_dataset_pth)
+        # Read actual dataset path from the path-only file
+        with open(args.raw_dataset_pth, "r") as f:
+            real_dataset_path = f.read().strip()
+        print(f"[INFO] Resolved raw dataset path = {real_dataset_path}")
+
+        df = pd.read_csv(real_dataset_path)
 
         # Example split (replace with actual logic)
         train_df = df.sample(frac=0.7, random_state=42)
