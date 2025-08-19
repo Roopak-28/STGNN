@@ -1,5 +1,5 @@
 name: Load Server Machine Dataset
-description: Downloads the Server Machine Dataset (SMD) from the OmniAnomaly GitHub repo, processes it, and saves train/test/label CSV files for downstream tasks.
+description: Downloads the Server Machine Dataset (SMD) from the OmniAnomaly GitHub repo, processes it, and saves train/test/label CSV files into a shared PVC for downstream tasks.
 
 outputs:
   - name: train_csv
@@ -16,24 +16,16 @@ implementation:
   container:
     image: python:3.9
     command:
-      - python3
-      - -u
+      - sh
       - -c
       - |
+        set -e
+        pip install pandas numpy scikit-learn --quiet
+        python3 -u - <<'EOF'
         import os
-        # Ensure required dependencies are installed
-        os.system("apt-get update && apt-get install -y git && pip install --no-cache-dir pandas numpy scikit-learn")
-
-        import argparse
         import pandas as pd
         import numpy as np
         from sklearn.preprocessing import StandardScaler
-
-        parser = argparse.ArgumentParser()
-        parser.add_argument('--train_csv', type=str, required=True)
-        parser.add_argument('--test_csv', type=str, required=True)
-        parser.add_argument('--labels_csv', type=str, required=True)
-        args = parser.parse_args()
 
         print("[INFO] Downloading Server Machine Dataset (SMD) from OmniAnomaly GitHub...")
         os.makedirs("/tmp/smd", exist_ok=True)
@@ -53,33 +45,35 @@ implementation:
         test_dfs = [load_smd_file(f) for f in test_files]
         label_dfs = [load_smd_file(f) for f in label_files]
 
-        # Concatenate all machines together
         train_all = pd.concat(train_dfs, ignore_index=True)
         test_all = pd.concat(test_dfs, ignore_index=True)
         labels_all = pd.concat(label_dfs, ignore_index=True)
 
-        # Normalize features
         scaler = StandardScaler()
         train_scaled = pd.DataFrame(scaler.fit_transform(train_all))
         test_scaled = pd.DataFrame(scaler.transform(test_all))
 
-        # Ensure all output directories exist
-        for path in [args.train_csv, args.test_csv, args.labels_csv]:
-            os.makedirs(os.path.dirname(path), exist_ok=True)
+        # Use PVC mount path
+        output_dir = "/mnt/shared/smd"
+        os.makedirs(output_dir, exist_ok=True)
 
-        # Save CSVs
-        train_scaled.to_csv(args.train_csv, index=False)
-        test_scaled.to_csv(args.test_csv, index=False)
-        labels_all.to_csv(args.labels_csv, index=False)
+        train_path = os.path.join(output_dir, "train.csv")
+        test_path = os.path.join(output_dir, "test.csv")
+        labels_path = os.path.join(output_dir, "labels.csv")
 
-        print(f"[SUCCESS] Train saved to {args.train_csv}")
-        print(f"[SUCCESS] Test saved to {args.test_csv}")
-        print(f"[SUCCESS] Labels saved to {args.labels_csv}")
+        train_scaled.to_csv(train_path, index=False)
+        test_scaled.to_csv(test_path, index=False)
+        labels_all.to_csv(labels_path, index=False)
 
+        # Write paths to stdout so Elyra/KFP registers them as outputs
+        print(train_path)
+        print(test_path)
+        print(labels_path)
+        EOF
     args:
       - --train_csv
-      - {outputPath: train_csv}
+      - /mnt/shared/smd/train.csv
       - --test_csv
-      - {outputPath: test_csv}
+      - /mnt/shared/smd/test.csv
       - --labels_csv
-      - {outputPath: labels_csv}
+      - /mnt/shared/smd/labels.csv
