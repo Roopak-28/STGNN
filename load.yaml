@@ -20,8 +20,11 @@ implementation:
       - -u
       - -c
       - |
-        import argparse
         import os
+        # Ensure required dependencies are installed
+        os.system("apt-get update && apt-get install -y git && pip install --no-cache-dir pandas numpy scikit-learn")
+
+        import argparse
         import pandas as pd
         import numpy as np
         from sklearn.preprocessing import StandardScaler
