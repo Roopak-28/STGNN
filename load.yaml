@@ -63,8 +63,9 @@ implementation:
         train_scaled = pd.DataFrame(scaler.fit_transform(train_all))
         test_scaled = pd.DataFrame(scaler.transform(test_all))
 
-        # Ensure output directory
-        os.makedirs(os.path.dirname(args.train_csv), exist_ok=True)
+        # Ensure all output directories exist
+        for path in [args.train_csv, args.test_csv, args.labels_csv]:
+            os.makedirs(os.path.dirname(path), exist_ok=True)
 
         # Save CSVs
         train_scaled.to_csv(args.train_csv, index=False)
