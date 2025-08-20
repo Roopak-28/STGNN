@@ -1,5 +1,5 @@
 name: Preprocess Server Machine Dataset
-description: Preprocesses dataset from load_dataset brick and prepares output paths for training, testing, and anomaly detection.
+description: Preprocesses SMD dataset from load_dataset brick and prepares train, test, and anomaly CSVs.
 
 inputs:
   - name: raw_dataset_pth
@@ -37,7 +37,6 @@ implementation:
       - -c
       - |
         set -e
-        # Install dependencies
         PIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet pandas numpy --user
         exec "$0" "$@"
       - python3
@@ -64,34 +63,31 @@ implementation:
         os.makedirs(os.path.dirname(args.test_pth), exist_ok=True)
         os.makedirs(os.path.dirname(args.anomaly_pth), exist_ok=True)
 
-        # Read actual dataset path from the path-only file
+        # Read the dataset path
         with open(args.raw_dataset_pth, "r") as f:
-            real_dataset_path = f.read().strip()
-        print(f"[INFO] Resolved raw dataset path = {real_dataset_path}")
+            dataset_path = f.read().strip()
+        print(f"[INFO] Dataset path: {dataset_path}")
 
-        # Handle case: directory with multiple files vs single file
-        if os.path.isdir(real_dataset_path):
-            all_files = [os.path.join(real_dataset_path, f) 
-                         for f in os.listdir(real_dataset_path) 
-                         if f.endswith(".csv") or f.endswith(".txt")]
-            if not all_files:
-                raise FileNotFoundError(f"No .csv/.txt files found in directory {real_dataset_path}")
-            df_list = [pd.read_csv(f, header=None) for f in sorted(all_files)]
-            df = pd.concat(df_list, ignore_index=True)
+        # Load CSV(s)
+        if os.path.isdir(dataset_path):
+            files = [os.path.join(dataset_path, f) for f in os.listdir(dataset_path) if f.endswith(".csv") or f.endswith(".txt")]
+            if not files:
+                raise FileNotFoundError(f"No CSV files found in {dataset_path}")
+            df = pd.concat([pd.read_csv(f, header=None) for f in sorted(files)], ignore_index=True)
         else:
-            df = pd.read_csv(real_dataset_path)
+            df = pd.read_csv(dataset_path)
 
-        # Example split (replace with your actual logic)
+        # Split dataset
         train_df = df.sample(frac=0.7, random_state=42)
         test_df = df.drop(train_df.index)
         anomaly_df = df[df.iloc[:, -1] == 1] if df.shape[1] > 1 else pd.DataFrame()
 
-        # Save processed datasets
+        # Save outputs
         train_df.to_csv(args.train_pth, index=False)
         test_df.to_csv(args.test_pth, index=False)
         anomaly_df.to_csv(args.anomaly_pth, index=False)
 
-        # Emit output artifact paths
+        # Emit Kubeflow artifact paths
         with open(args.train_out, "w") as f: f.write(args.train_pth)
         with open(args.test_out, "w") as f: f.write(args.test_pth)
         with open(args.anomaly_out, "w") as f: f.write(args.anomaly_pth)
@@ -99,6 +95,7 @@ implementation:
         print(f"[SUCCESS] Train saved to: {args.train_pth}")
         print(f"[SUCCESS] Test saved to: {args.test_pth}")
         print(f"[SUCCESS] Anomaly saved to: {args.anomaly_pth}")
+
     args:
       - --raw_dataset_pth
       - {inputPath: raw_dataset_pth}
