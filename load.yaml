@@ -17,7 +17,9 @@ implementation:
       - -c
       - |
         set -e
-        PIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet pandas numpy git --user
+        # Install git and Python packages
+        apt-get update && apt-get install -y git
+        PIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet pandas numpy
         exec "$0" "$@"
       - python3
       - -u
@@ -50,19 +52,19 @@ implementation:
         test_df = df.drop(train_df.index)
         anomaly_df = df[df.iloc[:, -1] == 1] if df.shape[1] > 1 else pd.DataFrame()
 
-        # Ensure directories exist
-        os.makedirs(os.path.dirname(args.train_csv), exist_ok=True)
-        os.makedirs(os.path.dirname(args.test_csv), exist_ok=True)
-        os.makedirs(os.path.dirname(args.anomaly_csv), exist_ok=True)
+        # Ensure output dirs exist
+        os.makedirs(args.train_csv, exist_ok=True)
+        os.makedirs(args.test_csv, exist_ok=True)
+        os.makedirs(args.anomaly_csv, exist_ok=True)
 
         # Save CSV files
-        train_df.to_csv(args.train_csv, index=False)
-        test_df.to_csv(args.test_csv, index=False)
-        anomaly_df.to_csv(args.anomaly_csv, index=False)
+        train_df.to_csv(os.path.join(args.train_csv, "data"), index=False)
+        test_df.to_csv(os.path.join(args.test_csv, "data"), index=False)
+        anomaly_df.to_csv(os.path.join(args.anomaly_csv, "data"), index=False)
 
-        print(f"[SUCCESS] Train CSV: {args.train_csv}")
-        print(f"[SUCCESS] Test CSV: {args.test_csv}")
-        print(f"[SUCCESS] Anomaly CSV: {args.anomaly_csv}")
+        print(f"[SUCCESS] Train CSV: {os.path.join(args.train_csv, 'data')}")
+        print(f"[SUCCESS] Test CSV: {os.path.join(args.test_csv, 'data')}")
+        print(f"[SUCCESS] Anomaly CSV: {os.path.join(args.anomaly_csv, 'data')}")
 
     args:
       - --train_csv
