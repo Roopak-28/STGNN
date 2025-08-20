@@ -43,13 +43,14 @@ implementation:
       - -c
       - |
         set -e
+        apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/*
         PIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet pandas numpy --user
         exec "$0" "$@"
       - python3
       - -u
       - -c
       - |
-        import argparse, os, pandas as pd
+        import argparse, os, pandas as pd, subprocess
 
         parser = argparse.ArgumentParser()
         parser.add_argument('--train_csv', type=str, required=True)
@@ -66,16 +67,21 @@ implementation:
 
         os.makedirs(args.output_dir, exist_ok=True)
 
-        # Read actual dataset paths written by load_dataset brick
+        # Read paths from upstream step
         with open(args.train_csv, "r") as f: train_path = f.read().strip()
         with open(args.test_csv, "r") as f: test_path = f.read().strip()
         with open(args.labels_csv, "r") as f: labels_path = f.read().strip()
 
-        print(f"[INFO] Train dir: {train_path}")
-        print(f"[INFO] Test dir: {test_path}")
-        print(f"[INFO] Labels dir: {labels_path}")
+        print(f"[INFO] Train dir (from file): {train_path}")
+        print(f"[INFO] Test dir (from file): {test_path}")
+        print(f"[INFO] Labels dir (from file): {labels_path}")
 
-        # Load and concatenate all files in train/test/labels dirs
+        # Ensure OmniAnomaly repo exists in this pod
+        if not os.path.exists("/tmp/omni/data/SMD"):
+            print("[INFO] Cloning OmniAnomaly repo...")
+            subprocess.run("git clone https://github.com/NetManAIOps/OmniAnomaly /tmp/omni", shell=True, check=True)
+
+        # Helper to load directory of CSV/TXT files
         def load_dir(path):
             files = [os.path.join(path, f) for f in sorted(os.listdir(path)) if f.endswith('.txt') or f.endswith('.csv')]
             if not files:
