@@ -1,34 +1,11 @@
 name: Preprocess Server Machine Dataset
-description: Preprocesses dataset from load_dataset brick and prepares output paths for training, testing, and anomaly detection.
-
+description: Preprocesses the SMD dataset to compute basic statistics and anomaly distribution, outputs results as JSON.
 inputs:
-  - name: raw_dataset_pth
-    type: Path
-    description: Path to raw dataset output from load_dataset brick.
-  - name: output_dir
-    type: String
-    description: Directory to store processed datasets.
-  - name: train_pth
-    type: String
-    description: Path to save processed training set.
-  - name: test_pth
-    type: String
-    description: Path to save processed testing set.
-  - name: anomaly_pth
-    type: String
-    description: Path to save processed anomaly set.
-
+  - name: smd_data
+    type: Dataset
 outputs:
-  - name: train_out
-    type: Path
-    description: Processed training dataset path.
-  - name: test_out
-    type: Path
-    description: Processed testing dataset path.
-  - name: anomaly_out
-    type: Path
-    description: Processed anomaly dataset path.
-
+  - name: stats_out
+    type: String
 implementation:
   container:
     image: python:3.9
@@ -36,8 +13,7 @@ implementation:
       - sh
       - -c
       - |
-        set -e
-        # Install dependencies
+        PIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet pandas numpy || \
         PIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet pandas numpy --user
         exec "$0" "$@"
       - python3
@@ -45,74 +21,73 @@ implementation:
       - -c
       - |
         import argparse
-        import pandas as pd
         import os
+        import pickle
+        import pandas as pd
+        import numpy as np
+        import json
+
+        def analyze_smd(df):
+            stats = {}
+            stats["num_rows"] = len(df)
+            stats["num_columns"] = df.shape[1]
+
+            # Basic statistics
+            stats["feature_means"] = df.mean().to_dict()
+            stats["feature_stds"] = df.std().to_dict()
+
+            # If dataset has anomaly labels, assume last column = label
+            if "label" in df.columns or df.columns[-1].lower() in ["label", "labels"]:
+                label_col = "label" if "label" in df.columns else df.columns[-1]
+                label_counts = df[label_col].value_counts().to_dict()
+                stats["label_distribution"] = label_counts
+            else:
+                stats["label_distribution"] = {}
+
+            return stats
 
         parser = argparse.ArgumentParser()
-        parser.add_argument('--raw_dataset_pth', type=str, required=True)
-        parser.add_argument('--output_dir', type=str, required=True)
-        parser.add_argument('--train_pth', type=str, required=True)
-        parser.add_argument('--test_pth', type=str, required=True)
-        parser.add_argument('--anomaly_pth', type=str, required=True)
-        parser.add_argument('--train_out', type=str, required=True)
-        parser.add_argument('--test_out', type=str, required=True)
-        parser.add_argument('--anomaly_out', type=str, required=True)
+        parser.add_argument('--smd_data', type=str, required=True)
+        parser.add_argument('--stats_out', type=str, required=True)
+
         args = parser.parse_args()
 
-        os.makedirs(args.output_dir, exist_ok=True)
-        os.makedirs(os.path.dirname(args.train_pth), exist_ok=True)
-        os.makedirs(os.path.dirname(args.test_pth), exist_ok=True)
-        os.makedirs(os.path.dirname(args.anomaly_pth), exist_ok=True)
+        print(f"Input path: {args.smd_data}")
+        print(f"Output path: {args.stats_out}")
 
-        # Read actual dataset path from the path-only file
-        with open(args.raw_dataset_pth, "r") as f:
-            real_dataset_path = f.read().strip()
-        print(f"[INFO] Resolved raw dataset path = {real_dataset_path}")
+        # Load dataset (pickle of pandas DataFrame)
+        try:
+            with open(args.smd_data, "rb") as f:
+                df = pickle.load(f)
+            print(f"Successfully loaded dataset with shape {df.shape}")
+        except Exception as e:
+            print(f"Error loading dataset: {e}")
+            import traceback
+            traceback.print_exc()
+            exit(1)
 
-        # Handle case: directory with multiple files vs single file
-        if os.path.isdir(real_dataset_path):
-            all_files = [os.path.join(real_dataset_path, f) 
-                         for f in os.listdir(real_dataset_path) 
-                         if f.endswith(".csv") or f.endswith(".txt")]
-            if not all_files:
-                raise FileNotFoundError(f"No .csv/.txt files found in directory {real_dataset_path}")
-            df_list = [pd.read_csv(f, header=None) for f in sorted(all_files)]
-            df = pd.concat(df_list, ignore_index=True)
-        else:
-            df = pd.read_csv(real_dataset_path)
+        # Ensure output directory exists
+        os.makedirs(os.path.dirname(args.stats_out), exist_ok=True)
 
-        # Example split (replace with your actual logic)
-        train_df = df.sample(frac=0.7, random_state=42)
-        test_df = df.drop(train_df.index)
-        anomaly_df = df[df.iloc[:, -1] == 1] if df.shape[1] > 1 else pd.DataFrame()
+        # Analyze dataset
+        try:
+            stats_dict = analyze_smd(df)
 
-        # Save processed datasets
-        train_df.to_csv(args.train_pth, index=False)
-        test_df.to_csv(args.test_pth, index=False)
-        anomaly_df.to_csv(args.anomaly_pth, index=False)
+            # Save stats to JSON
+            with open(args.stats_out, 'w') as f:
+                json.dump(stats_dict, f, indent=2)
 
-        # Emit output artifact paths
-        with open(args.train_out, "w") as f: f.write(args.train_pth)
-        with open(args.test_out, "w") as f: f.write(args.test_pth)
-        with open(args.anomaly_out, "w") as f: f.write(args.anomaly_pth)
+            print(f"[SUCCESS] Saved dataset statistics to {args.stats_out}")
+            print(f"Stats: {stats_dict}")
 
-        print(f"[SUCCESS] Train saved to: {args.train_pth}")
-        print(f"[SUCCESS] Test saved to: {args.test_pth}")
-        print(f"[SUCCESS] Anomaly saved to: {args.anomaly_pth}")
+        except Exception as e:
+            print(f"Error during preprocessing: {e}")
+            import traceback
+            traceback.print_exc()
+            exit(1)
+
     args:
-      - --raw_dataset_pth
-      - {inputPath: raw_dataset_pth}
-      - --output_dir
-      - {inputValue: output_dir}
-      - --train_pth
-      - {inputValue: train_pth}
-      - --test_pth
-      - {inputValue: test_pth}
-      - --anomaly_pth
-      - {inputValue: anomaly_pth}
-      - --train_out
-      - {outputPath: train_out}
-      - --test_out
-      - {outputPath: test_out}
-      - --anomaly_out
-      - {outputPath: anomaly_out}
+      - --smd_data
+      - {inputPath: smd_data}
+      - --stats_out
+      - {outputPath: stats_out}
