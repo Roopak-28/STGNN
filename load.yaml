@@ -17,18 +17,14 @@ implementation:
       - -c
       - |
         set -e
-        # Install git, wget, unzip and Python packages including requests
-        apt-get update && apt-get install -y git wget unzip
-        PIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet pandas numpy requests
-        exec "$0" "$@"
-      - python3
-      - -u
-      - -c
-      - |
+        # Install Python packages
+        python3 -m pip install --quiet --no-cache-dir pandas numpy requests
+        # Run the Python script
+        python3 -u - <<'EOF'
         import argparse
         import os
         import pandas as pd
-        import requests, zipfile, io
+        import requests
 
         parser = argparse.ArgumentParser()
         parser.add_argument('--train_csv', type=str, required=True)
@@ -36,34 +32,38 @@ implementation:
         parser.add_argument('--anomaly_csv', type=str, required=True)
         args = parser.parse_args()
 
-        # Download SMD dataset if not exists
-        smd_path = "/tmp/omni/data/SMD"
-        if not os.path.exists(smd_path):
-            os.makedirs(smd_path, exist_ok=True)
-            url = "https://github.com/NetManAIOps/OmniAnomaly/raw/master/data/SMD/SMD.zip"
-            r = requests.get(url)
-            z = zipfile.ZipFile(io.BytesIO(r.content))
-            z.extractall(smd_path)
-
-        dataset_path = os.path.join(smd_path, "train")
-        csv_files = [os.path.join(dataset_path, f) for f in os.listdir(dataset_path) if f.endswith(".csv") or f.endswith(".txt")]
-        if not csv_files:
-            raise FileNotFoundError(f"No CSV/TXT files found in {dataset_path}")
-
-        df_list = [pd.read_csv(f, header=None) for f in sorted(csv_files)]
-        df = pd.concat(df_list, ignore_index=True)
-
-        # Example split: train/test/anomaly
-        train_df = df.sample(frac=0.7, random_state=42)
-        test_df = df.drop(train_df.index)
-        anomaly_df = df[df.iloc[:, -1] == 1] if df.shape[1] > 1 else pd.DataFrame()
-
-        # Ensure output dirs exist
+        # Prepare output dirs
         os.makedirs(args.train_csv, exist_ok=True)
         os.makedirs(args.test_csv, exist_ok=True)
         os.makedirs(args.anomaly_csv, exist_ok=True)
 
-        # Save CSV files
+        # URLs of some example SMD CSV files from GitHub
+        train_urls = [
+            "https://raw.githubusercontent.com/NetManAIOps/OmniAnomaly/master/data/SMD/train/server1.csv",
+            "https://raw.githubusercontent.com/NetManAIOps/OmniAnomaly/master/data/SMD/train/server2.csv"
+        ]
+        test_urls = [
+            "https://raw.githubusercontent.com/NetManAIOps/OmniAnomaly/master/data/SMD/test/server1.csv",
+            "https://raw.githubusercontent.com/NetManAIOps/OmniAnomaly/master/data/SMD/test/server2.csv"
+        ]
+
+        def download_csv(urls):
+            dfs = []
+            for url in urls:
+                r = requests.get(url)
+                if r.status_code != 200:
+                    raise ValueError(f"Failed to download {url}")
+                df = pd.read_csv(pd.compat.StringIO(r.text), header=None)
+                dfs.append(df)
+            return pd.concat(dfs, ignore_index=True)
+
+        # Download train/test
+        train_df = download_csv(train_urls)
+        test_df = download_csv(test_urls)
+        # Anomaly rows (last column == 1)
+        anomaly_df = train_df[train_df.iloc[:, -1] == 1] if train_df.shape[1] > 1 else pd.DataFrame()
+
+        # Save CSVs
         train_df.to_csv(os.path.join(args.train_csv, "data"), index=False)
         test_df.to_csv(os.path.join(args.test_csv, "data"), index=False)
         anomaly_df.to_csv(os.path.join(args.anomaly_csv, "data"), index=False)
@@ -71,6 +71,7 @@ implementation:
         print(f"[SUCCESS] Train CSV: {os.path.join(args.train_csv, 'data')}")
         print(f"[SUCCESS] Test CSV: {os.path.join(args.test_csv, 'data')}")
         print(f"[SUCCESS] Anomaly CSV: {os.path.join(args.anomaly_csv, 'data')}")
+        EOF
 
     args:
       - --train_csv
