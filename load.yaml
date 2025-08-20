@@ -1,7 +1,14 @@
 name: Load Server Machine Dataset
-description: Loads the Server Machine Dataset (SMD) and saves it as a Dataset type.
+description: Loads the SMD dataset and saves train, test, and anomaly CSVs.
+
 outputs:
-  - {name: smd_data, type: Dataset}
+  - name: train_csv
+    type: Path
+  - name: test_csv
+    type: Path
+  - name: anomaly_csv
+    type: Path
+
 implementation:
   container:
     image: python:3.9
@@ -9,8 +16,8 @@ implementation:
       - sh
       - -c
       - |
-        PIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet pandas requests || \
-        PIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet pandas requests --user
+        set -e
+        PIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet pandas numpy git --user
         exec "$0" "$@"
       - python3
       - -u
@@ -18,43 +25,49 @@ implementation:
       - |
         import argparse
         import os
-        import pickle
         import pandas as pd
-        import requests
 
         parser = argparse.ArgumentParser()
-        parser.add_argument('--smd_data', type=str, required=True)
+        parser.add_argument('--train_csv', type=str, required=True)
+        parser.add_argument('--test_csv', type=str, required=True)
+        parser.add_argument('--anomaly_csv', type=str, required=True)
         args = parser.parse_args()
 
-        print(f"[INFO] Loading Server Machine Dataset...")
+        # Clone OmniAnomaly repo if not exists
+        if not os.path.exists("/tmp/omni"):
+            os.system("git clone https://github.com/NetManAIOps/OmniAnomaly /tmp/omni")
 
-        # Make sure dataset dir exists
-        dataset_dir = "/tmp/smd"
-        os.makedirs(dataset_dir, exist_ok=True)
+        dataset_path = "/tmp/omni/data/SMD/train"
+        csv_files = [os.path.join(dataset_path, f) for f in os.listdir(dataset_path) if f.endswith(".csv") or f.endswith(".txt")]
+        if not csv_files:
+            raise FileNotFoundError(f"No CSV/TXT files found in {dataset_path}")
 
-        # Example: download a single machine CSV file (you can expand for all machines)
-        url = "https://raw.githubusercontent.com/NetManAIOps/OmniAnomaly/master/ServerMachineDataset/test/1.csv"
-        local_path = os.path.join(dataset_dir, "machine1_test.csv")
+        df_list = [pd.read_csv(f, header=None) for f in sorted(csv_files)]
+        df = pd.concat(df_list, ignore_index=True)
 
-        if not os.path.exists(local_path):
-            r = requests.get(url)
-            with open(local_path, "wb") as f:
-                f.write(r.content)
-            print(f"[INFO] Downloaded dataset to {local_path}")
-        else:
-            print(f"[INFO] Dataset already exists at {local_path}")
+        # Example split: train/test/anomaly
+        train_df = df.sample(frac=0.7, random_state=42)
+        test_df = df.drop(train_df.index)
+        anomaly_df = df[df.iloc[:, -1] == 1] if df.shape[1] > 1 else pd.DataFrame()
 
-        # Load with pandas
-        df = pd.read_csv(local_path)
-        print(f"[INFO] Dataset shape = {df.shape}")
+        # Ensure directories exist
+        os.makedirs(os.path.dirname(args.train_csv), exist_ok=True)
+        os.makedirs(os.path.dirname(args.test_csv), exist_ok=True)
+        os.makedirs(os.path.dirname(args.anomaly_csv), exist_ok=True)
 
-        # Save via pickle
-        os.makedirs(os.path.dirname(args.smd_data), exist_ok=True)
-        with open(args.smd_data, "wb") as f:
-            pickle.dump(df, f)
+        # Save CSV files
+        train_df.to_csv(args.train_csv, index=False)
+        test_df.to_csv(args.test_csv, index=False)
+        anomaly_df.to_csv(args.anomaly_csv, index=False)
 
-        print(f"[SUCCESS] Saved SMD dataset to {args.smd_data}")
+        print(f"[SUCCESS] Train CSV: {args.train_csv}")
+        print(f"[SUCCESS] Test CSV: {args.test_csv}")
+        print(f"[SUCCESS] Anomaly CSV: {args.anomaly_csv}")
 
     args:
-      - --smd_data
-      - {outputPath: smd_data}
+      - --train_csv
+      - {outputPath: train_csv}
+      - --test_csv
+      - {outputPath: test_csv}
+      - --anomaly_csv
+      - {outputPath: anomaly_csv}
