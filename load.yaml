@@ -2,12 +2,9 @@ name: Load Server Machine Dataset
 description: Loads the SMD dataset and saves train, test, and anomaly CSVs.
 
 outputs:
-  - name: train_csv
-    type: Path
-  - name: test_csv
-    type: Path
-  - name: anomaly_csv
-    type: Path
+  - {name: train_csv, type: Path}
+  - {name: test_csv, type: Path}
+  - {name: anomaly_csv, type: Path}
 
 implementation:
   container:
@@ -16,8 +13,8 @@ implementation:
       - sh
       - -c
       - |
-        pip install --quiet pandas requests &&
-        python3 -u -c "
+        pip install --quiet pandas requests
+        python3 -u - <<EOF
 import argparse, os, pandas as pd, requests, io
 
 parser = argparse.ArgumentParser()
@@ -61,7 +58,7 @@ anomaly_df.to_csv(os.path.join(args.anomaly_csv, 'data'), index=False)
 print('[SUCCESS] Train CSV:', os.path.join(args.train_csv, 'data'))
 print('[SUCCESS] Test CSV:', os.path.join(args.test_csv, 'data'))
 print('[SUCCESS] Anomaly CSV:', os.path.join(args.anomaly_csv, 'data'))
-"
+EOF
     args:
       - --train_csv
       - {outputPath: train_csv}
