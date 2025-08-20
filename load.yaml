@@ -1,11 +1,7 @@
 name: Load Server Machine Dataset
-description: Downloads the Server Machine Dataset (SMD) and saves only the paths to train, test, and anomaly label directories.
-
+description: Loads the Server Machine Dataset (SMD) and saves it as a Dataset type.
 outputs:
-  - {name: train_csv, type: Path, description: Path string to training dataset directory.}
-  - {name: test_csv, type: Path, description: Path string to testing dataset directory.}
-  - {name: labels_csv, type: Path, description: Path string to anomaly labels directory.}
-
+  - {name: smd_data, type: Dataset}
 implementation:
   container:
     image: python:3.9
@@ -13,46 +9,52 @@ implementation:
       - sh
       - -c
       - |
-        apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/*
+        PIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet pandas requests || \
+        PIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet pandas requests --user
         exec "$0" "$@"
       - python3
       - -u
       - -c
       - |
-        import argparse, os, sys
+        import argparse
+        import os
+        import pickle
+        import pandas as pd
+        import requests
 
         parser = argparse.ArgumentParser()
-        parser.add_argument("--train_csv", type=str, required=True)
-        parser.add_argument("--test_csv", type=str, required=True)
-        parser.add_argument("--labels_csv", type=str, required=True)
+        parser.add_argument('--smd_data', type=str, required=True)
         args = parser.parse_args()
 
-        print("[INFO] Downloading Server Machine Dataset (SMD) from OmniAnomaly GitHub...")
-        os.system("git clone https://github.com/NetManAIOps/OmniAnomaly /tmp/omni")
+        print(f"[INFO] Loading Server Machine Dataset...")
 
-        train_path = "/tmp/omni/data/SMD/train"
-        test_path = "/tmp/omni/data/SMD/test"
-        labels_path = "/tmp/omni/data/SMD/test_label"
+        # Make sure dataset dir exists
+        dataset_dir = "/tmp/smd"
+        os.makedirs(dataset_dir, exist_ok=True)
 
-        print(f"[SUCCESS] Train path: {train_path}")
-        print(f"[SUCCESS] Test path: {test_path}")
-        print(f"[SUCCESS] Labels path: {labels_path}")
+        # Example: download a single machine CSV file (you can expand for all machines)
+        url = "https://raw.githubusercontent.com/NetManAIOps/OmniAnomaly/master/ServerMachineDataset/test/1.csv"
+        local_path = os.path.join(dataset_dir, "machine1_test.csv")
 
-        # Ensure output dirs exist
-        os.makedirs(os.path.dirname(args.train_csv), exist_ok=True)
-        os.makedirs(os.path.dirname(args.test_csv), exist_ok=True)
-        os.makedirs(os.path.dirname(args.labels_csv), exist_ok=True)
+        if not os.path.exists(local_path):
+            r = requests.get(url)
+            with open(local_path, "wb") as f:
+                f.write(r.content)
+            print(f"[INFO] Downloaded dataset to {local_path}")
+        else:
+            print(f"[INFO] Dataset already exists at {local_path}")
 
-        # Write the paths into files (so downstream bricks can read them)
-        with open(args.train_csv, "w") as f: f.write(train_path)
-        with open(args.test_csv, "w") as f: f.write(test_path)
-        with open(args.labels_csv, "w") as f: f.write(labels_path)
+        # Load with pandas
+        df = pd.read_csv(local_path)
+        print(f"[INFO] Dataset shape = {df.shape}")
 
-        print(f"[SUCCESS] Wrote output paths to: {args.train_csv}, {args.test_csv}, {args.labels_csv}")
+        # Save via pickle
+        os.makedirs(os.path.dirname(args.smd_data), exist_ok=True)
+        with open(args.smd_data, "wb") as f:
+            pickle.dump(df, f)
+
+        print(f"[SUCCESS] Saved SMD dataset to {args.smd_data}")
+
     args:
-      - --train_csv
-      - {outputPath: train_csv}
-      - --test_csv
-      - {outputPath: test_csv}
-      - --labels_csv
-      - {outputPath: labels_csv}
+      - --smd_data
+      - {outputPath: smd_data}
