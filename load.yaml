@@ -1,5 +1,5 @@
 name: Load Server Machine Dataset
-description: Loads the SMD dataset and saves train, test, and anomaly CSVs.
+description: Loads the Server Machine Dataset (SMD), converts .txt to CSV, and saves train, test, and anomaly files.
 
 outputs:
   - {name: train_csv, type: Path}
@@ -13,14 +13,14 @@ implementation:
       - sh
       - -c
       - |
-        PIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet pandas numpy requests || \
-        PIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet pandas numpy requests --user
+        PIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet pandas requests || \
+        PIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet pandas requests --user
         exec "$0" "$@"
       - python3
       - -u
       - -c
       - |
-        import argparse, pandas as pd, requests, io
+        import argparse, pandas as pd, requests, io, os
 
         parser = argparse.ArgumentParser()
         parser.add_argument('--train_csv', type=str, required=True)
@@ -30,16 +30,14 @@ implementation:
 
         print("[INFO] Downloading Server Machine Dataset (SMD)...")
 
-        train_urls = [
-            "https://raw.githubusercontent.com/NetManAIOps/OmniAnomaly/master/data/SMD/train/server1.csv",
-            "https://raw.githubusercontent.com/NetManAIOps/OmniAnomaly/master/data/SMD/train/server2.csv"
-        ]
-        test_urls = [
-            "https://raw.githubusercontent.com/NetManAIOps/OmniAnomaly/master/data/SMD/test/server1.csv",
-            "https://raw.githubusercontent.com/NetManAIOps/OmniAnomaly/master/data/SMD/test/server2.csv"
-        ]
+        base_url = "https://raw.githubusercontent.com/NetManAIOps/OmniAnomaly/master/data/SMD"
 
-        def download_csv(urls):
+        # Example: machine-1 (two segments)
+        train_files = [f"{base_url}/train/machine-1-1.txt", f"{base_url}/train/machine-1-2.txt"]
+        test_files = [f"{base_url}/test/machine-1-1.txt", f"{base_url}/test/machine-1-2.txt"]
+        label_files = [f"{base_url}/test_label/machine-1-1.txt", f"{base_url}/test_label/machine-1-2.txt"]
+
+        def download_txts(urls):
             dfs = []
             for url in urls:
                 r = requests.get(url)
@@ -47,18 +45,25 @@ implementation:
                 dfs.append(pd.read_csv(io.StringIO(r.text), header=None))
             return pd.concat(dfs, ignore_index=True)
 
-        train_df = download_csv(train_urls)
-        test_df = download_csv(test_urls)
-        anomaly_df = train_df[train_df.iloc[:, -1] == 1] if train_df.shape[1] > 1 else pd.DataFrame()
+        train_df = download_txts(train_files)
+        test_df = download_txts(test_files)
+        label_df = download_txts(label_files)
 
-        # Write directly to Elyra output paths
+        anomaly_df = test_df[label_df.iloc[:,0] == 1]
+
+        # Ensure output dirs
+        os.makedirs(os.path.dirname(args.train_csv), exist_ok=True)
+        os.makedirs(os.path.dirname(args.test_csv), exist_ok=True)
+        os.makedirs(os.path.dirname(args.anomaly_csv), exist_ok=True)
+
+        # Save outputs
         train_df.to_csv(args.train_csv, index=False)
         test_df.to_csv(args.test_csv, index=False)
         anomaly_df.to_csv(args.anomaly_csv, index=False)
 
-        print(f"[SUCCESS] Train CSV written to {args.train_csv}")
-        print(f"[SUCCESS] Test CSV written to {args.test_csv}")
-        print(f"[SUCCESS] Anomaly CSV written to {args.anomaly_csv}")
+        print(f"[SUCCESS] Train CSV saved at {args.train_csv}")
+        print(f"[SUCCESS] Test CSV saved at {args.test_csv}")
+        print(f"[SUCCESS] Anomaly CSV saved at {args.anomaly_csv}")
     args:
       - --train_csv
       - {outputPath: train_csv}
