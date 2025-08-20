@@ -18,7 +18,7 @@ implementation:
       - |
         set -e
         # Install git and Python packages
-        apt-get update && apt-get install -y git
+        apt-get update && apt-get install -y git wget unzip
         PIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet pandas numpy
         exec "$0" "$@"
       - python3
@@ -28,6 +28,7 @@ implementation:
         import argparse
         import os
         import pandas as pd
+        import requests, zipfile, io
 
         parser = argparse.ArgumentParser()
         parser.add_argument('--train_csv', type=str, required=True)
@@ -35,11 +36,16 @@ implementation:
         parser.add_argument('--anomaly_csv', type=str, required=True)
         args = parser.parse_args()
 
-        # Clone OmniAnomaly repo if not exists
-        if not os.path.exists("/tmp/omni"):
-            os.system("git clone https://github.com/NetManAIOps/OmniAnomaly /tmp/omni")
+        # Download SMD dataset if not exists
+        smd_path = "/tmp/omni/data/SMD"
+        if not os.path.exists(smd_path):
+            os.makedirs(smd_path, exist_ok=True)
+            url = "https://github.com/NetManAIOps/OmniAnomaly/raw/master/data/SMD/SMD.zip"
+            r = requests.get(url)
+            z = zipfile.ZipFile(io.BytesIO(r.content))
+            z.extractall(smd_path)
 
-        dataset_path = "/tmp/omni/data/SMD/train"
+        dataset_path = os.path.join(smd_path, "train")
         csv_files = [os.path.join(dataset_path, f) for f in os.listdir(dataset_path) if f.endswith(".csv") or f.endswith(".txt")]
         if not csv_files:
             raise FileNotFoundError(f"No CSV/TXT files found in {dataset_path}")
