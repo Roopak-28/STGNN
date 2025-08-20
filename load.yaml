@@ -1,10 +1,10 @@
 name: Load Server Machine Dataset
-description: Loads the Server Machine Dataset (SMD), converts .txt to CSV, and saves train, test, and anomaly files.
+description: Downloads the Server Machine Dataset (SMD) and saves only the paths to train, test, and anomaly label directories.
 
 outputs:
-  - {name: train_csv, type: Path}
-  - {name: test_csv, type: Path}
-  - {name: anomaly_csv, type: Path}
+  - {name: train_csv, type: Path, description: Path string to training dataset directory.}
+  - {name: test_csv, type: Path, description: Path string to testing dataset directory.}
+  - {name: labels_csv, type: Path, description: Path string to anomaly labels directory.}
 
 implementation:
   container:
@@ -13,61 +13,46 @@ implementation:
       - sh
       - -c
       - |
-        PIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet pandas requests || \
-        PIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet pandas requests --user
+        apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/*
         exec "$0" "$@"
       - python3
       - -u
       - -c
       - |
-        import argparse, pandas as pd, requests, io, os
+        import argparse, os, sys
 
         parser = argparse.ArgumentParser()
-        parser.add_argument('--train_csv', type=str, required=True)
-        parser.add_argument('--test_csv', type=str, required=True)
-        parser.add_argument('--anomaly_csv', type=str, required=True)
+        parser.add_argument("--train_csv", type=str, required=True)
+        parser.add_argument("--test_csv", type=str, required=True)
+        parser.add_argument("--labels_csv", type=str, required=True)
         args = parser.parse_args()
 
-        print("[INFO] Downloading Server Machine Dataset (SMD)...")
+        print("[INFO] Downloading Server Machine Dataset (SMD) from OmniAnomaly GitHub...")
+        os.system("git clone https://github.com/NetManAIOps/OmniAnomaly /tmp/omni")
 
-        base_url = "https://raw.githubusercontent.com/NetManAIOps/OmniAnomaly/master/data/SMD"
+        train_path = "/tmp/omni/data/SMD/train"
+        test_path = "/tmp/omni/data/SMD/test"
+        labels_path = "/tmp/omni/data/SMD/test_label"
 
-        # Example: machine-1 (two segments)
-        train_files = [f"{base_url}/train/machine-1-1.txt", f"{base_url}/train/machine-1-2.txt"]
-        test_files = [f"{base_url}/test/machine-1-1.txt", f"{base_url}/test/machine-1-2.txt"]
-        label_files = [f"{base_url}/test_label/machine-1-1.txt", f"{base_url}/test_label/machine-1-2.txt"]
+        print(f"[SUCCESS] Train path: {train_path}")
+        print(f"[SUCCESS] Test path: {test_path}")
+        print(f"[SUCCESS] Labels path: {labels_path}")
 
-        def download_txts(urls):
-            dfs = []
-            for url in urls:
-                r = requests.get(url)
-                r.raise_for_status()
-                dfs.append(pd.read_csv(io.StringIO(r.text), header=None))
-            return pd.concat(dfs, ignore_index=True)
-
-        train_df = download_txts(train_files)
-        test_df = download_txts(test_files)
-        label_df = download_txts(label_files)
-
-        anomaly_df = test_df[label_df.iloc[:,0] == 1]
-
-        # Ensure output dirs
+        # Ensure output dirs exist
         os.makedirs(os.path.dirname(args.train_csv), exist_ok=True)
         os.makedirs(os.path.dirname(args.test_csv), exist_ok=True)
-        os.makedirs(os.path.dirname(args.anomaly_csv), exist_ok=True)
+        os.makedirs(os.path.dirname(args.labels_csv), exist_ok=True)
 
-        # Save outputs
-        train_df.to_csv(args.train_csv, index=False)
-        test_df.to_csv(args.test_csv, index=False)
-        anomaly_df.to_csv(args.anomaly_csv, index=False)
+        # Write the paths into files (so downstream bricks can read them)
+        with open(args.train_csv, "w") as f: f.write(train_path)
+        with open(args.test_csv, "w") as f: f.write(test_path)
+        with open(args.labels_csv, "w") as f: f.write(labels_path)
 
-        print(f"[SUCCESS] Train CSV saved at {args.train_csv}")
-        print(f"[SUCCESS] Test CSV saved at {args.test_csv}")
-        print(f"[SUCCESS] Anomaly CSV saved at {args.anomaly_csv}")
+        print(f"[SUCCESS] Wrote output paths to: {args.train_csv}, {args.test_csv}, {args.labels_csv}")
     args:
       - --train_csv
       - {outputPath: train_csv}
       - --test_csv
       - {outputPath: test_csv}
-      - --anomaly_csv
-      - {outputPath: anomaly_csv}
+      - --labels_csv
+      - {outputPath: labels_csv}
