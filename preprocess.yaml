@@ -2,9 +2,15 @@ name: Preprocess Server Machine Dataset
 description: Preprocesses SMD dataset from load_dataset brick and prepares train, test, and anomaly CSVs.
 
 inputs:
-  - name: raw_dataset_pth
+  - name: train_csv
     type: Path
-    description: Path to raw dataset output from load_dataset brick.
+    description: File containing path string to training dataset directory.
+  - name: test_csv
+    type: Path
+    description: File containing path string to testing dataset directory.
+  - name: labels_csv
+    type: Path
+    description: File containing path string to anomaly labels directory.
   - name: output_dir
     type: String
     description: Directory to store processed datasets.
@@ -43,12 +49,12 @@ implementation:
       - -u
       - -c
       - |
-        import argparse
-        import pandas as pd
-        import os
+        import argparse, os, pandas as pd
 
         parser = argparse.ArgumentParser()
-        parser.add_argument('--raw_dataset_pth', type=str, required=True)
+        parser.add_argument('--train_csv', type=str, required=True)
+        parser.add_argument('--test_csv', type=str, required=True)
+        parser.add_argument('--labels_csv', type=str, required=True)
         parser.add_argument('--output_dir', type=str, required=True)
         parser.add_argument('--train_pth', type=str, required=True)
         parser.add_argument('--test_pth', type=str, required=True)
@@ -59,30 +65,28 @@ implementation:
         args = parser.parse_args()
 
         os.makedirs(args.output_dir, exist_ok=True)
-        os.makedirs(os.path.dirname(args.train_pth), exist_ok=True)
-        os.makedirs(os.path.dirname(args.test_pth), exist_ok=True)
-        os.makedirs(os.path.dirname(args.anomaly_pth), exist_ok=True)
 
-        # Read the dataset path
-        with open(args.raw_dataset_pth, "r") as f:
-            dataset_path = f.read().strip()
-        print(f"[INFO] Dataset path: {dataset_path}")
+        # Read actual dataset paths written by load_dataset brick
+        with open(args.train_csv, "r") as f: train_path = f.read().strip()
+        with open(args.test_csv, "r") as f: test_path = f.read().strip()
+        with open(args.labels_csv, "r") as f: labels_path = f.read().strip()
 
-        # Load CSV(s)
-        if os.path.isdir(dataset_path):
-            files = [os.path.join(dataset_path, f) for f in os.listdir(dataset_path) if f.endswith(".csv") or f.endswith(".txt")]
+        print(f"[INFO] Train dir: {train_path}")
+        print(f"[INFO] Test dir: {test_path}")
+        print(f"[INFO] Labels dir: {labels_path}")
+
+        # Load and concatenate all files in train/test/labels dirs
+        def load_dir(path):
+            files = [os.path.join(path, f) for f in sorted(os.listdir(path)) if f.endswith('.txt') or f.endswith('.csv')]
             if not files:
-                raise FileNotFoundError(f"No CSV files found in {dataset_path}")
-            df = pd.concat([pd.read_csv(f, header=None) for f in sorted(files)], ignore_index=True)
-        else:
-            df = pd.read_csv(dataset_path)
+                raise FileNotFoundError(f"No data files found in {path}")
+            return pd.concat([pd.read_csv(f, header=None) for f in files], ignore_index=True)
 
-        # Split dataset
-        train_df = df.sample(frac=0.7, random_state=42)
-        test_df = df.drop(train_df.index)
-        anomaly_df = df[df.iloc[:, -1] == 1] if df.shape[1] > 1 else pd.DataFrame()
+        train_df = load_dir(train_path)
+        test_df = load_dir(test_path)
+        anomaly_df = load_dir(labels_path)
 
-        # Save outputs
+        # Save processed datasets
         train_df.to_csv(args.train_pth, index=False)
         test_df.to_csv(args.test_pth, index=False)
         anomaly_df.to_csv(args.anomaly_pth, index=False)
@@ -97,8 +101,12 @@ implementation:
         print(f"[SUCCESS] Anomaly saved to: {args.anomaly_pth}")
 
     args:
-      - --raw_dataset_pth
-      - {inputPath: raw_dataset_pth}
+      - --train_csv
+      - {inputPath: train_csv}
+      - --test_csv
+      - {inputPath: test_csv}
+      - --labels_csv
+      - {inputPath: labels_csv}
       - --output_dir
       - {inputValue: output_dir}
       - --train_pth
