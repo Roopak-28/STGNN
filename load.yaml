@@ -19,59 +19,56 @@ implementation:
         set -e
         # Install Python packages
         python3 -m pip install --quiet --no-cache-dir pandas numpy requests
-        # Run the Python script
-        python3 -u - <<'EOF'
-        import argparse
-        import os
-        import pandas as pd
-        import requests
+        # Run Python script with arguments passed from Kubeflow
+        python3 -u -c "
+import argparse
+import os
+import pandas as pd
+import requests
 
-        parser = argparse.ArgumentParser()
-        parser.add_argument('--train_csv', type=str, required=True)
-        parser.add_argument('--test_csv', type=str, required=True)
-        parser.add_argument('--anomaly_csv', type=str, required=True)
-        args = parser.parse_args()
+parser = argparse.ArgumentParser()
+parser.add_argument('--train_csv', type=str, required=True)
+parser.add_argument('--test_csv', type=str, required=True)
+parser.add_argument('--anomaly_csv', type=str, required=True)
+args = parser.parse_args()
 
-        # Prepare output dirs
-        os.makedirs(args.train_csv, exist_ok=True)
-        os.makedirs(args.test_csv, exist_ok=True)
-        os.makedirs(args.anomaly_csv, exist_ok=True)
+# Prepare output dirs
+os.makedirs(args.train_csv, exist_ok=True)
+os.makedirs(args.test_csv, exist_ok=True)
+os.makedirs(args.anomaly_csv, exist_ok=True)
 
-        # URLs of some example SMD CSV files from GitHub
-        train_urls = [
-            "https://raw.githubusercontent.com/NetManAIOps/OmniAnomaly/master/data/SMD/train/server1.csv",
-            "https://raw.githubusercontent.com/NetManAIOps/OmniAnomaly/master/data/SMD/train/server2.csv"
-        ]
-        test_urls = [
-            "https://raw.githubusercontent.com/NetManAIOps/OmniAnomaly/master/data/SMD/test/server1.csv",
-            "https://raw.githubusercontent.com/NetManAIOps/OmniAnomaly/master/data/SMD/test/server2.csv"
-        ]
+# Example: download some SMD CSVs directly from GitHub
+train_urls = [
+    'https://raw.githubusercontent.com/NetManAIOps/OmniAnomaly/master/data/SMD/train/server1.csv',
+    'https://raw.githubusercontent.com/NetManAIOps/OmniAnomaly/master/data/SMD/train/server2.csv'
+]
+test_urls = [
+    'https://raw.githubusercontent.com/NetManAIOps/OmniAnomaly/master/data/SMD/test/server1.csv',
+    'https://raw.githubusercontent.com/NetManAIOps/OmniAnomaly/master/data/SMD/test/server2.csv'
+]
 
-        def download_csv(urls):
-            dfs = []
-            for url in urls:
-                r = requests.get(url)
-                if r.status_code != 200:
-                    raise ValueError(f"Failed to download {url}")
-                df = pd.read_csv(pd.compat.StringIO(r.text), header=None)
-                dfs.append(df)
-            return pd.concat(dfs, ignore_index=True)
+def download_csv(urls):
+    dfs = []
+    for url in urls:
+        r = requests.get(url)
+        if r.status_code != 200:
+            raise ValueError(f'Failed to download {url}')
+        df = pd.read_csv(pd.compat.StringIO(r.text), header=None)
+        dfs.append(df)
+    return pd.concat(dfs, ignore_index=True)
 
-        # Download train/test
-        train_df = download_csv(train_urls)
-        test_df = download_csv(test_urls)
-        # Anomaly rows (last column == 1)
-        anomaly_df = train_df[train_df.iloc[:, -1] == 1] if train_df.shape[1] > 1 else pd.DataFrame()
+train_df = download_csv(train_urls)
+test_df = download_csv(test_urls)
+anomaly_df = train_df[train_df.iloc[:, -1] == 1] if train_df.shape[1] > 1 else pd.DataFrame()
 
-        # Save CSVs
-        train_df.to_csv(os.path.join(args.train_csv, "data"), index=False)
-        test_df.to_csv(os.path.join(args.test_csv, "data"), index=False)
-        anomaly_df.to_csv(os.path.join(args.anomaly_csv, "data"), index=False)
+train_df.to_csv(os.path.join(args.train_csv, 'data'), index=False)
+test_df.to_csv(os.path.join(args.test_csv, 'data'), index=False)
+anomaly_df.to_csv(os.path.join(args.anomaly_csv, 'data'), index=False)
 
-        print(f"[SUCCESS] Train CSV: {os.path.join(args.train_csv, 'data')}")
-        print(f"[SUCCESS] Test CSV: {os.path.join(args.test_csv, 'data')}")
-        print(f"[SUCCESS] Anomaly CSV: {os.path.join(args.anomaly_csv, 'data')}")
-        EOF
+print(f'[SUCCESS] Train CSV: {os.path.join(args.train_csv, 'data')}')
+print(f'[SUCCESS] Test CSV: {os.path.join(args.test_csv, 'data')}')
+print(f'[SUCCESS] Anomaly CSV: {os.path.join(args.anomaly_csv, 'data')}')
+"
 
     args:
       - --train_csv
